@@ -153,6 +153,7 @@ NSComparisonResult;
 
 enum {NSNotFound = NSIntegerMax};
 
+typedef NSComparisonResult (^NSComparator)(id obj1, id obj2);
 
 #ifdef __clang__
 #define NS_REQUIRES_NIL_TERMINATION __attribute__((sentinel))
