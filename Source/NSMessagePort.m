@@ -1186,21 +1186,27 @@ typedef	struct {
 {
   static int unique_index = 0;
   NSString	*path;
-  NSNumber	*p = [NSNumber numberWithInt: 0700];
   NSDictionary	*attr;
 
-  attr = [NSDictionary dictionaryWithObject: p
-				     forKey: NSFilePosixPermissions];
+  if (nil == (path = NSTemporaryDirectory()))
+    {
+      return nil;
+    }
 
-  path = NSTemporaryDirectory();
+  attr = [NSDictionary dictionaryWithObject: [NSNumber numberWithInt: 0700]
+				     forKey: NSFilePosixPermissions];
 
   path = [path stringByAppendingPathComponent: @"NSMessagePort"];
   [[NSFileManager defaultManager] createDirectoryAtPath: path
-				  attributes: attr];
+                            withIntermediateDirectories: YES
+                                             attributes: attr
+                                                  error: NULL];
 
   path = [path stringByAppendingPathComponent: @"ports"];
   [[NSFileManager defaultManager] createDirectoryAtPath: path
-				  attributes: attr];
+                            withIntermediateDirectories: YES
+                                             attributes: attr
+                                                  error: NULL];
 
   M_LOCK(messagePortLock);
   path = [path stringByAppendingPathComponent:
@@ -1414,6 +1420,8 @@ typedef	struct {
  */
 - (void) getFds: (NSInteger*)fds count: (NSInteger*)count
 {
+  NSInteger             limit = *count;
+  NSInteger             pos = 0;
   NSMapEnumerator	me;
   void			*sock;
   GSMessageHandle	*handle;
@@ -1422,18 +1430,15 @@ typedef	struct {
   M_LOCK(myLock);
 
   /*
-   * Make sure there is enough room in the provided array.
-   */
-  NSAssert(*count > (int)NSCountMapTable(handles),
-    NSInternalInconsistencyException);
-
-  /*
    * Put in our listening socket.
    */
-  *count = 0;
   if (lDesc >= 0)
     {
-      fds[(*count)++] = lDesc;
+      if (pos < limit)
+        {
+          fds[pos] = lDesc;
+        }
+      pos++;
     }
 
   /*
@@ -1445,12 +1450,17 @@ typedef	struct {
   while (NSNextMapEnumeratorPair(&me, &sock, (void**)&handle))
     {
       if (handle->recvPort == recvSelf)
-	{
-	  fds[(*count)++] = (int)(intptr_t)sock;
-	}
+        {
+          if (pos < limit)
+            {
+              fds[pos] = (int)(intptr_t)sock;
+            }
+          pos++;
+        }
     }
   NSEndMapTableEnumeration(&me);
   M_UNLOCK(myLock);
+  *count = pos;
 }
 
 - (id) conversation: (NSPort*)recvPort

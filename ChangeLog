@@ -1,7 +1,246 @@
+2012-08-16  Niels Grewe <niels.grewe@halbordnung.de>
+
+	* configure.ac: Check for objc_root_class attribute
+	* configure: Regenerate
+	* config/objc-common.g: Annotate root classes.
+	* Headers/GNUstepBase/config.h.in: Regenerate
+	* Headers/GNUstepBase/GSConfig.h.in: Add macro for root class
+	attribute availability.
+	* Headers/GNUstepBase/GSVersionMacros.h: Define GS_ROOT_CLASS
+	depending on whether the compiler supports it.
+	* Headers/Foundation/NSObject.h: Mark NSObject as a root class.
+	* Headers/Foundation/NSProxy.h: Mark NSProxy as a root class.
+	* Source/NSDistantObject: Mark GSDistantObjectPlaceholder as a
+	root class.
+	* Source/NSObject.m: Mark NSZombie as a root class.
+
+	Changes to support clang's __attribute__((objc_root_class)).
+ 	
+2012-08-10  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSScanner.m: Fix error in comment
+        * Tools/pldes.m: Update to more modern APIs
+        * Tools/plser.m: Update to more modern APIs
+        * Source/NSPropertyList.m: Update for usigned long long
+        * Source/NSString.m: Make intValue, integerValue, longLongValue
+        return large unsigned values as negative.
+        Fixes to try to cope with property lists containing very large
+        unsigned integers (top bit set).
+
+2012-08-10  Richard Frith-Macdonald <rfm@gnu.org>
+
+	* Source/NSPathUtilities.m:
+        Fix permissions on temporary directory rarther than just failing ...
+        suggestion by Wolfgang.
+
+2012-08-10  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSFileManager.m: ([-createDirectoryAtPath:attributes:])
+        OSX compatibility change to no longer create intermediate directories
+        (fixing bug #35672).
+        NB. Code depending on the original incorrect behavior should be 
+        updated to use the new method:
+        -createDirectoryAtPath:withIntermediateDirectories:attributes:error:
+        
+2012-08-10  Richard Frith-Macdonald <rfm@gnu.org>
+
+	* Source/NSSpellServer.m:
+	* Source/NSPropertyList.m:
+	* Source/NSPathUtilities.m:
+	* Source/NSUserDefaults.m:
+	* Source/NSMessagePortNameServer.m:
+	* Source/NSDistributedLock.m:
+	* Source/NSMessagePort.m:
+	* Source/NSHTTPCookieStorage.m:
+        Use new method for creating intermediate directories rater than 
+        depending on incorrect behavior of the old method. 
+
+2012-08-09  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSPropertyList.m:
+        Fix problem considering a lack of whitespace at the end of the
+        list as an error.
+        * GSeq.h: Replace tolower() with uni_tolower() where using 8bit
+        strings and the internal coding is latin1 and may not be the same
+        as the native encoding.
+
+2012-08-08 Riccardo Mottola <rm@gnu.org>
+
+	* Tools/AGSParser.m:
+	Add macro detection for MacOS version 10.1 to 10.6 and make
+	GS_API_LATEST the last in priority.
+
+2012-08-08  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/GSString.m: Simplify/remove upper and lower case conversion
+        to use superclass implementation avoiding toupper() and tolower().
+        Change other literal string methods to check that the content
+        is really utf8 in more places.  Generally simplify/cleanup a bit.
+
+2012-08-02  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/GSValue.m: ([-isEqualToValue:]) add check for self equality
+        and fix error checking tyep signature.
+        * Source/Additions/GSObjCRuntime.m: (GSSelectorTypesMatch) fix to
+        return a true BOOL value.
+
+2012-07-31  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/Additions/GSMime.m: Optimisations for chunked encoding.
+        a. Don't resize the buffer for each chunk ... that's very inefficient
+        if the other end sends tiny chunks.  Instead, make the buffer big
+        enough to handle all the available data, then shrink back to the
+        decoded size.
+        b. Move method call out of the loop handling individual bytes.
+
+2012-07-30  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSData.m: ([setLength:]) increase size of buffer in chunks
+        proportional to the current size ... so if we add small amounts to a
+        buffer many, many times, we don't reallocate the memory for each tiny
+        increment.  Should make accumulating large amounts of data into a
+        buffer much more efficient.
+
+2012-07-27  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSKeyValueObserving.m:
+        Try fix for bug #36967
+
+2012-07-27  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSXMLNode.m: Just report string value as description ...
+        which appears to be what OSX does.
+        * Tests/base/KVC/mutable.m: Add tests based on code by Riccardo.
+
+2012-07-27  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSKeyValueObserving.m:
+        * Source/GSFFIInvocation.m:
+        * Source/GSPrivate.h:
+        * Source/NSInvocation.m:
+        * Source/cifframe.h:
+        * Source/cifframe.m:
+        Initial attempt at implementing KVO for structure setter methods in
+        general via libffi.
+
+2012-07-27  Fred Kiefer <FredKiefer@gmx.de>
+
+	* Source/NSXMLNode.m (-description): Remove trailing newline. This
+	should fix #36976.
+
+2012-07-11  Richard Frith-Macdonald <rfm@gnu.org>
+
+	* Source/GSFFCallInvocation.m:
+	* Source/NSKeyValueObserving.m:
+	* Source/Additions/GSObjCRuntime.m:
+	* Source/NSProtocolChecker.m:
+	* Source/GSValue.m:
+	* Source/NSValue.m:
+        Use GSSelectorTypesMatch() for type comparisons.
+
+2012-07-12 19:26-EDT Gregory John Casamento <greg.casamento@gmail.com>
+
+	* Source/NSFileManager.m: Correct misspelled ASSIGN which was
+	causing link errors.
+
+2012-07-11  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/Additions/GSMime.m: Don't accept documents where header lines
+        contain bytes which can't be converted to a string.
+
+2012-07-11  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSKeyedArchiver.m:
+        * Source/NSCoder.m:
+        * Source/Additions/GSObjCRuntime.m:
+        * Source/NSArchiver.m:
+        * Headers/GNUstepBase/GSObjCRuntime.h:
+        Have leading type qualifiers and laout information skipped when
+        encoding a value of on ObjC type, rather than objecting that the
+        supplied type string is not a known type.
+        Fix for bug #36824
+
+2012-07-09  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/GSFFIInvocation.m: Fix for bug #36706
+        * Source/NSObject.m: Also, apply patch by Niels Grewe with modsvn commit
+
+2012-07-09  Sebastian Reitenbach <buzzdee>
+
+        * Source/NSThread.m: Fixes test for posix thread scheduling.
+
+2012-07-09  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSBundle.m: Fixes for bug #34815 ... map between old and
+        new style language names and use the best language specific
+        resource available.
+        * Resources/Languages/Locale.canonical: Add mappings from three
+        letter language names to two letter names where they exist.
+
+2012-07-08  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Headers/GNUstepBase/GSVersionMacros.h:
+        fix for bug #36650
+        * Source/NSFileManager.m: Apply rewritten patch by Sergey Golovin
+        * Source/NSBundle.m: Fix for bug #34815 ... we shoudl now move to
+        using ISO names.
+
+2012-07-08  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSURL.m:
+        * Source/NSURLHandle.m:
+        Re-load a cached  handle if the content has been invalidated.
+        Set the status of a file handle to not-loaded if the fiel is modified.
+        Should fix bug #36726
+        
+2012-07-05  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSBundle.m: Don't assume that code loading won't be called
+        re-entrantly.
+
+2012-07-05  Quentin Mathe <quentin.mathe@gmail.com>
+
+	* Source/NSPathUtilities.m: Fixed constant string comparison error 
+	reported by Clang SVN trunk r158230 or more recent.
+	See http://llvm.org/viewvc/llvm-project?view=rev&revision=158230
+        This is a workaround for a Clang compiler bug ...
+
+2012-07-02  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSBundle.m: Attempted fix for bug #34191 ... change framework
+        class association to keep a map of loaded frameworks/bundles by class
+        for quick lookup and alter code to check the runtime for new frameworks
+        if we are asked for the bundle for a class and we can't find it.
+
+2012-06-27  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSScanner.m: Fix missing 'else' which was causing a
+        memory leak and minor performance degradation.
+
+2012-06-12  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSPropertyList.m: Check for nil property list argument.
+
+2012-06-07  Wolfgang Lux  <wolfgang.lux@gmail.com>
+
+	* Source/unix/GSRunLoopCtxt.m (-pollUntil:within:): Fix previous
+	change to compile again when using select() instead of poll().
+
+2012-06-06  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSSocketPort.m:
+        * Source/unix/GSRunLoopCtxt.m:
+        * Source/NSMessagePort.m:
+        * Source/win32/GSRunLoopCtxt.m:
+        Modify code for getting file descriptors to cope with an unlimited
+        number (allocate buffer on heap if necessary) for server processes
+        with very large numbers of distributed object connections.
+
 2012-04-30 Riccardo Mottola <rm@gnu.org>
 
 	* Source/NSString:
-	Do not include malloc on OpenBSD to avoid warning (and include stdlib always).
+	Do not include malloc on OpenBSD to avoid warning (and include
+        stdlib always).
 
 2012-04-29 Riccardo Mottola <rm@gnu.org>
 

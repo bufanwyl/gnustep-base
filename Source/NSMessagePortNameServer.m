@@ -269,20 +269,28 @@ static void clean_up_names(void)
   [serverLock lock];
   if (!base_path)
     {
-      NSNumber		*p = [NSNumber numberWithInt: 0700];
       NSDictionary	*attr;
 
-      path = NSTemporaryDirectory();
-      attr = [NSDictionary dictionaryWithObject: p
-				     forKey: NSFilePosixPermissions];
+      if (nil == (path = NSTemporaryDirectory()))
+        {
+          [serverLock unlock];
+          return nil;
+        }
+
+      attr = [NSDictionary dictionaryWithObject: [NSNumber numberWithInt: 0700]
+                                         forKey: NSFilePosixPermissions];
 
       path = [path stringByAppendingPathComponent: @"NSMessagePort"];
       [[NSFileManager defaultManager] createDirectoryAtPath: path
-				      attributes: attr];
+                                withIntermediateDirectories: YES
+                                                 attributes: attr
+                                                      error: NULL];
 
       path = [path stringByAppendingPathComponent: @"names"];
       [[NSFileManager defaultManager] createDirectoryAtPath: path
-				      attributes: attr];
+                                withIntermediateDirectories: YES
+                                                 attributes: attr
+                                                      error: NULL];
 
       base_path = RETAIN(path);
     }

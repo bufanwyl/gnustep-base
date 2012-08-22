@@ -27,7 +27,7 @@
 #include <poll.h>
 #endif
 
-#define	FDCOUNT	128
+#define	FDCOUNT	1024
 
 #if	GS_WITH_GC == 0
 static SEL	wRelSel;
@@ -378,19 +378,29 @@ static void setPollfd(int fd, int event, GSRunLoopCtxt *ctxt)
 	      case ET_RPORT: 
 		{
 		  id port = info->receiver;
+                  NSInteger port_fd_size = FDCOUNT;
 		  NSInteger port_fd_count = FDCOUNT;
-		  NSInteger port_fd_array[FDCOUNT];
+		  NSInteger port_fd_buffer[FDCOUNT];
+		  NSInteger *port_fd_array = port_fd_buffer;
 
 		  [port getFds: port_fd_array count: &port_fd_count];
+                  while (port_fd_count > port_fd_size)
+                    {
+                      if (port_fd_array != port_fd_buffer) free(port_fd_array);
+                      port_fd_size = port_fd_count;
+                      port_fd_count = port_fd_size;
+                      port_fd_array = malloc(sizeof(NSInteger)*port_fd_size);
+                      [port getFds: port_fd_array count: &port_fd_count];
+                    }
 		  NSDebugMLLog(@"NSRunLoop",
 		    @"listening to %d port handles\n", port_fd_count);
 		  while (port_fd_count--)
 		    {
 		      fd = port_fd_array[port_fd_count];
 		      setPollfd(fd, POLLIN, self);
-		      NSMapInsert(_rfdMap, 
-			(void*)(intptr_t)port_fd_array[port_fd_count], info);
+		      NSMapInsert(_rfdMap, (void*)(intptr_t)fd, info);
 		    }
+                  if (port_fd_array != port_fd_buffer) free(port_fd_array);
 		}
 		break;
 	    }
@@ -496,13 +506,13 @@ static void setPollfd(int fd, int event, GSRunLoopCtxt *ctxt)
     }
 
   /*
-   * Look at all the file descriptors select() says are ready for action;
+   * Look at all the file descriptors poll() says are ready for action;
    * notify the corresponding object for each of the ready fd's.
    * NB. It is possible for a watcher to be missing from the map - if
    * the event handler of a previous watcher has 'run' the loop again
    * before returning.
    * NB. Each time this loop is entered, the starting position (fairStart)
-   * is incremented - this is to ensure a fair distribion over all
+   * is incremented - this is to ensure a fair distribution over all
    * inputs where multiple inputs are in use.  Note - fairStart can be
    * modified while we are in the loop (by recursive calls).
    */
@@ -792,21 +802,31 @@ static void setPollfd(int fd, int event, GSRunLoopCtxt *ctxt)
 	      case ET_RPORT: 
 		{
 		  id port = info->receiver;
+                  NSInteger port_fd_size = FDCOUNT;
 		  NSInteger port_fd_count = FDCOUNT;
-		  NSInteger port_fd_array[FDCOUNT];
+		  NSInteger port_fd_buffer[FDCOUNT];
+		  NSInteger *port_fd_array = port_fd_buffer;
 
 		  [port getFds: port_fd_array count: &port_fd_count];
+                  while (port_fd_count > port_fd_size)
+                    {
+                      if (port_fd_array != port_fd_buffer) free(port_fd_array);
+                      port_fd_size = port_fd_count;
+                      port_fd_count = port_fd_size;
+                      port_fd_array = malloc(sizeof(NSInteger)*port_fd_size);
+                      [port getFds: port_fd_array count: &port_fd_count];
+                    }
 		  NSDebugMLLog(@"NSRunLoop", @"listening to %d port sockets",
 		    port_fd_count);
 		  while (port_fd_count--)
 		    {
 		      fd = port_fd_array[port_fd_count];
-		      FD_SET (port_fd_array[port_fd_count], &read_fds);
 		      if (fd > fdEnd)
 			fdEnd = fd;
-		      NSMapInsert(_rfdMap, 
-			(void*)(intptr_t)port_fd_array[port_fd_count], info);
+		      FD_SET (fd, &read_fds);
+		      NSMapInsert(_rfdMap, (void*)(intptr_t)fd, info);
 		    }
+                  if (port_fd_array != port_fd_buffer) free(port_fd_array);
 		}
 		break;
 
@@ -870,28 +890,28 @@ static void setPollfd(int fd, int event, GSRunLoopCtxt *ctxt)
       GSRunLoopWatcher	*watcher;
 
       watcher = (GSRunLoopWatcher*)GSIArrayItemAtIndex(_trigger, count).obj;
-	if (watcher->_invalidated == NO)
-	  {
-	    i = [contexts count];
-	    while (i-- > 0)
-	      {
-		GSRunLoopCtxt	*c = [contexts objectAtIndex: i];
+      if (watcher->_invalidated == NO)
+	{
+	  i = [contexts count];
+	  while (i-- > 0)
+	    {
+	      GSRunLoopCtxt	*c = [contexts objectAtIndex: i];
 
-		if (c != self)
-		  {
-		    [c endEvent: (void*)watcher for: watcher];
-		  }
-	      }
-	    /*
-	     * The watcher is still valid - so call its
-	     * receivers event handling method.
-	     */
-	    [watcher->receiver receivedEvent: watcher->data
-					type: watcher->type
-				       extra: watcher->data
-				     forMode: mode];
-	  }
-	GSPrivateNotifyASAP(mode);
+	      if (c != self)
+		{
+		  [c endEvent: (void*)watcher for: watcher];
+		}
+	    }
+	  /*
+	   * The watcher is still valid - so call its
+	   * receivers event handling method.
+	   */
+	  [watcher->receiver receivedEvent: watcher->data
+				      type: watcher->type
+				     extra: watcher->data
+				   forMode: mode];
+	}
+      GSPrivateNotifyASAP(mode);
     }
 
   /*
@@ -902,12 +922,12 @@ static void setPollfd(int fd, int event, GSRunLoopCtxt *ctxt)
       completed = YES;
       return NO;
     }
-      
+
   /*
    * Look at all the file descriptors select() says are ready for action;
    * notify the corresponding object for each of the ready fd's.
-   * NB. Each time this roop is entered, the starting position (fairStart)
-   * is incremented - this is to ensure a fair distribtion over all
+   * NB. Each time this loop is entered, the starting position (fairStart)
+   * is incremented - this is to ensure a fair distribution over all
    * inputs where multiple inputs are in use.  Note - fairStart can be
    * modified while we are in the loop (by recursive calls).
    */
