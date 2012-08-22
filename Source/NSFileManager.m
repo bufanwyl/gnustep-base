@@ -51,6 +51,7 @@
 #import "Foundation/NSDate.h"
 #import "Foundation/NSDictionary.h"
 #import "Foundation/NSEnumerator.h"
+#import "Foundation/NSError.h"
 #import "Foundation/NSException.h"
 #import "Foundation/NSFileManager.h"
 #import "Foundation/NSLock.h"
@@ -294,9 +295,16 @@ static Class	GSAttrDictionaryClass = 0;
                            fromPath: (NSString*) fromPath
                              toPath: (NSString*) toPath;
 
-
-
-
+/* A convenience method to return an NSError object.
+ * If the _lastError message is set, this creates an NSError using
+ * that message in the NSCocoaErrorDomain, otherwise it used the
+ * most recent system error and the Posix error domain.
+ * The userInfo is set to contain NSLocalizedDescriptionKey for the
+ * message text, 'Path' if only the fromPath argument is specified,
+ * and 'FromPath' and 'ToPath' if both path argument are specified.
+ */
+- (NSError*) _errorFrom: (NSString*)fromPath to: (NSString*)toPath;
+				   
 @end /* NSFileManager (PrivateMethods) */
 
 /**
@@ -390,16 +398,18 @@ static NSStringEncoding	defaultEncoding;
  */
 - (BOOL) changeFileAttributes: (NSDictionary*)attributes atPath: (NSString*)path
 {
+  NSDictionary  *old;
   const _CHAR	*lpath = 0;
-  unsigned long	num;
+  NSUInteger	num;
   NSString	*str;
   NSDate	*date;
   BOOL		allOk = YES;
 
-  if (attributes == nil)
+  if (0 == [attributes count])
     {
       return YES;
     }
+  old = [self fileAttributesAtPath: path traverseLink: YES];
   lpath = [defaultManager fileSystemRepresentationWithPath: path];
 
 #ifndef __MINGW__
@@ -413,7 +423,7 @@ static NSStringEncoding	defaultEncoding;
 
       num = tmpNum ? [tmpNum unsignedLongValue] : NSNotFound;
     }
-  if (num != NSNotFound)
+  if (num != NSNotFound && num != [[old fileOwnerAccountID] unsignedLongValue])
     {
       if (chown(lpath, num, -1) != 0)
 	{
@@ -426,7 +436,8 @@ static NSStringEncoding	defaultEncoding;
     }
   else
     {
-      if ((str = [attributes fileOwnerAccountName]) != nil)
+      if ((str = [attributes fileOwnerAccountName]) != nil
+        && NO == [str isEqual: [old fileOwnerAccountName]])
 	{
 	  BOOL	ok = NO;
 #ifdef HAVE_PWD_H
@@ -477,7 +488,8 @@ static NSStringEncoding	defaultEncoding;
 
       num = tmpNum ? [tmpNum unsignedLongValue] : NSNotFound;
     }
-  if (num != NSNotFound)
+  if (num != NSNotFound
+    && num != [[old fileGroupOwnerAccountID] unsignedLongValue])
     {
       if (chown(lpath, -1, num) != 0)
 	{
@@ -488,7 +500,8 @@ static NSStringEncoding	defaultEncoding;
 	  ASSIGN(_lastError, str);
 	}
     }
-  else if ((str = [attributes fileGroupOwnerAccountName]) != nil)
+  else if ((str = [attributes fileGroupOwnerAccountName]) != nil
+    && NO == [str isEqual: [old fileGroupOwnerAccountName]])
     {
       BOOL	ok = NO;
 #ifdef HAVE_GRP_H
@@ -530,7 +543,7 @@ static NSStringEncoding	defaultEncoding;
 #endif	/* __MINGW__ */
 
   num = [attributes filePosixPermissions];
-  if (num != NSNotFound)
+  if (num != NSNotFound && num != [old filePosixPermissions])
     {
       if (_CHMOD(lpath, num) != 0)
 	{
@@ -543,7 +556,7 @@ static NSStringEncoding	defaultEncoding;
     }
 
   date = [attributes fileModificationDate];
-  if (date != nil)
+  if (date != nil && NO == [date isEqual: [old fileModificationDate]])
     {
       BOOL		ok = NO;
       struct _STATB	sb;
@@ -693,13 +706,30 @@ static NSStringEncoding	defaultEncoding;
 
 - (NSArray*) contentsOfDirectoryAtPath: (NSString*)path error: (NSError**)error
 {
-  return [self directoryContentsAtPath: path];
+  NSArray       *result;
+
+  DESTROY(_lastError);
+  result = [self directoryContentsAtPath: path];
+
+  if (error != NULL)
+    {
+      if (nil == result)
+	{
+	  *error = [self _errorFrom: path to: nil];
+	}
+      else
+	{
+	  *error = nil;
+	}
+    }
+
+  return result; 
 }
 
 /**
- * Creates a new directory and all intermediate directories
- * if flag is YES, creates only the last directory in the path
- * if flag is NO.  The directory is created with the attributes
+ * Creates a new directory and all intermediate directories. if flag is YES.
+ * Creates only the last directory in the path if flag is NO.<br />
+ * The directory is created with the attributes
  * specified in attributes and any error is returned in error.<br />
  * returns YES on success, NO on failure.
  */
@@ -710,17 +740,18 @@ static NSStringEncoding	defaultEncoding;
 {
   BOOL result = NO;
 
-  if (flag == YES)
+  DESTROY(_lastError);
+  if (YES == flag)
     {
-      NSEnumerator *paths = [[path pathComponents] objectEnumerator];
-      NSString *path = nil;
-      NSString *dir = [NSString string];
+      NSEnumerator      *paths = [[path pathComponents] objectEnumerator];
+      NSString          *path = nil;
+      NSString          *dir = [NSString string];
 
       while ((path = (NSString *)[paths nextObject]) != nil)
 	{
 	  dir = [dir stringByAppendingPathComponent: path];
 	  result = [self createDirectoryAtPath: dir
-			 attributes: attributes];
+                                    attributes: attributes];
 	}
     }
   else
@@ -736,171 +767,105 @@ static NSStringEncoding	defaultEncoding;
       else
         {
           result = NO;  
-          ASSIGN(_lastError, @"Could not create directory - intermediate paths did not exist or were not a directory");
+          ASSIGN(_lastError, @"Could not create directory - intermediate path did not exist or was not a directory");
         }
     }  
 
   if (error != NULL)
     {
-      *error = [NSError _last];
+      if (NO == result)
+	{
+	  *error = [self _errorFrom: path to: nil];
+	}
+      else
+	{
+	  *error = nil;
+	}
     }
+
   return result;
 }
 
 /**
  * Creates a new directory, and sets its attributes as specified.<br />
- * Creates other directories in the path as necessary.<br />
- * Returns YES on success, NO on failure.
+ * Fails if directories in the path are missing.<br />
+ * Returns YES if the directory was created (or already exists), NO otherwise.
  */
 - (BOOL) createDirectoryAtPath: (NSString*)path
 		    attributes: (NSDictionary*)attributes
 {
-#if defined(__MINGW__)
-  NSEnumerator	*paths = [[path pathComponents] objectEnumerator];
-  NSString	*subPath;
-  NSString	*completePath = nil;
-#else
-  const char	*lpath;
-  char		dirpath[PATH_MAX+1];
-  struct _STATB	statbuf;
-  int		len, cur;
-  NSDictionary	*needChown = nil;
-#endif
+  BOOL  isDir;
 
   /* This is consistent with MacOSX - just return NO for an invalid path. */
   if ([path length] == 0)
-    return NO;
+    {
+      ASSIGN(_lastError, @"no path given");
+      return NO;
+    }
 
+  if (YES == [self fileExistsAtPath: path isDirectory: &isDir])
+    {
+      if (NO == isDir)
+        {
+          NSString  *e;
+
+          e = [NSString stringWithFormat:
+            @"path %@ exists, but is not a directory", path];
+          ASSIGN(_lastError, e);
+          return NO;
+        }
+    }
+  else
+    {
 #if defined(__MINGW__)
-  while ((subPath = [paths nextObject]))
-    {
-      BOOL isDir = NO;
-
-      if (completePath == nil)
-	completePath = subPath;
-      else
-	completePath = [completePath stringByAppendingPathComponent: subPath];
-
-      if ([self fileExistsAtPath: completePath isDirectory: &isDir])
-	{
-	  if (!isDir)
-	    NSLog(@"WARNING: during creation of directory %@:"
-		  @" sub path %@ exists, but is not a directory !",
-		  path, completePath);
-        }
-      else
-	{
-	  const _CHAR *lpath;
-
-	  lpath = [self fileSystemRepresentationWithPath: completePath];
-	  if (CreateDirectoryW(lpath, 0) == FALSE)
-	    {
-	      return NO;
-	    }
-        }
-    }
-
+      const _CHAR   *lpath;
+          
+      lpath = [self fileSystemRepresentationWithPath: path];
+      isDir = (CreateDirectoryW(lpath, 0) != FALSE) ? YES : NO;
 #else
+      const char    *lpath;
 
-  /*
-   * If there is no file owner specified, and we are running setuid to
-   * root, then we assume we need to change ownership to correct user.
-   */
-  if (attributes == nil || ([attributes fileOwnerAccountID] == nil
-    && [attributes fileOwnerAccountName] == nil))
-    {
-      if (geteuid() == 0 && [@"root" isEqualToString: NSUserName()] == NO)
-	{
-	  needChown = [NSDictionary dictionaryWithObjectsAndKeys:
-	    NSFileOwnerAccountName, NSUserName(), nil];
-	}
+      lpath = [self fileSystemRepresentationWithPath: path];
+      isDir = (mkdir(lpath, 0777) == 0) ? YES : NO;
+      if (YES == isDir)
+        {
+          /*
+           * If there is no file owner specified, and we are running
+           * setuid to root, then we assume we need to change ownership
+           * to the correct user.
+           */
+          if (attributes == nil || ([attributes fileOwnerAccountID] == nil
+            && [attributes fileOwnerAccountName] == nil))
+            {
+              if (geteuid() == 0
+                && [@"root" isEqualToString: NSUserName()] == NO)
+                {
+                  NSMutableDictionary       *m;
+
+                  m = [[attributes mutableCopy] autorelease];
+                  if (nil == m)
+                    {
+                      m = [NSMutableDictionary dictionaryWithCapacity: 1];
+                    }
+                  [m setObject: NSUserName()
+                        forKey: NSFileOwnerAccountName];
+                  attributes = m;
+                }
+            }
+        }
+#endif
+      if (NO == isDir)
+        {
+          NSString	*e;
+
+          e = [NSString stringWithFormat:
+            @"Could not create '%@' - '%@'",
+            path, [NSError _last]];
+          ASSIGN(_lastError, e);
+          return NO;
+        }
     }
-  lpath = [self fileSystemRepresentationWithPath: path];
-  len = strlen(lpath);
-  if (len > PATH_MAX) // name too long
-    {
-      ASSIGN(_lastError, @"Could not create directory - name too long");
-      return NO;
-    }
 
-  if (strcmp(lpath, "/") == 0 || len == 0) // cannot use "/" or ""
-    {
-      ASSIGN(_lastError, @"Could not create directory - no name given");
-      return NO;
-    }
-
-  strncpy(dirpath, lpath, len);
-  dirpath[len] = '\0';
-  if (dirpath[len-1] == '/')
-    dirpath[len-1] = '\0';
-  cur = 0;
-
-  do
-    {
-      // find next '/'
-      while (dirpath[cur] != '/' && cur < len)
-	cur++;
-      // if first char is '/' then again; (cur == len) -> last component
-      if (cur == 0)
-	{
-	  cur++;
-	  continue;
-	}
-      // check if path from 0 to cur is valid
-      dirpath[cur] = '\0';
-      if (_STAT(dirpath, &statbuf) == 0)
-	{
-	  if (cur == len)
-	    {
-	      ASSIGN(_lastError,
-		@"Could not create directory - already exists");
-	      return NO;
-	    }
-	}
-      else
-	{
-	  // make new directory
-	  if (mkdir(dirpath, 0777) != 0)
-	    {
-	      NSString	*s;
-
-	      s = [NSString stringWithFormat: @"Could not create '%s' - '%@'",
-		dirpath, [NSError _last]];
-	      ASSIGN(_lastError, s);
-	      return NO;
-	    }
-	  // if last directory and attributes then change
-	  if (cur == len && attributes != nil)
-	    {
-	      if ([self changeFileAttributes: attributes
-		atPath: [self stringWithFileSystemRepresentation: dirpath
-			length: cur]] == NO)
-		return NO;
-	      if (needChown != nil)
-		{
-		  if ([self changeFileAttributes: needChown
-		    atPath: [self stringWithFileSystemRepresentation: dirpath
-		      length: cur]] == NO)
-		    {
-		      NSLog(@"Failed to change ownership of '%s' to '%@'",
-			      dirpath, NSUserName());
-		    }
-		}
-	      return YES;
-	    }
-	}
-      dirpath[cur] = '/';
-      cur++;
-    }
-  while (cur < len);
-
-#endif /* !MINGW */
-
-  // change attributes of last directory
-  if ([attributes count] == 0)
-    {
-      return YES;
-    }
   return [self changeFileAttributes: attributes atPath: path];
 }
 
@@ -927,7 +892,10 @@ static NSStringEncoding	defaultEncoding;
 
   /* This is consistent with MacOSX - just return NO for an invalid path. */
   if ([path length] == 0)
-    return NO;
+    {
+      ASSIGN(_lastError, @"no path given");
+      return NO;
+    }
 
 #if	defined(__MINGW__)
   fh = CreateFileW(lpath, GENERIC_WRITE, 0, 0, CREATE_ALWAYS,
@@ -1075,6 +1043,7 @@ static NSStringEncoding	defaultEncoding;
       if ([[destination stringByAppendingString: @"/"]
 	hasPrefix: [source stringByAppendingString: @"/"]])
 	{
+	  ASSIGN(_lastError, @"Could not copy - destination is a descendant of source");
 	  return NO;
 	}
 
@@ -1145,9 +1114,23 @@ static NSStringEncoding	defaultEncoding;
 		 toPath: (NSString*)dst
 		  error: (NSError**)error
 {
-  BOOL	result;
+  BOOL  result;
 
+  DESTROY(_lastError);
   result = [self copyPath: src toPath: dst handler: nil];
+
+  if (error != NULL)
+    {
+      if (NO == result)
+	{
+	  *error = [self _errorFrom: src to: dst];
+	}
+      else
+	{
+	  *error = nil;
+	}
+    }
+
   return result;
 }
 
@@ -1200,6 +1183,7 @@ static NSStringEncoding	defaultEncoding;
       if (sourceIsDir && [[destination stringByAppendingString: @"/"]
 	hasPrefix: [source stringByAppendingString: @"/"]])
 	{
+	  ASSIGN(_lastError, @"Could not move - destination is a descendant of source");
 	  return NO;
 	}
 
@@ -1241,9 +1225,23 @@ static NSStringEncoding	defaultEncoding;
 		 toPath: (NSString*)dst
 		  error: (NSError**)error
 {
-  BOOL	result;
+  BOOL  result;
 
+  DESTROY(_lastError);
   result = [self movePath: src toPath: dst handler: nil];
+  
+  if (error != NULL)
+    {
+      if (NO == result)
+	{
+	  *error = [self _errorFrom: src to: dst];
+	}
+      else
+	{
+	  *error = nil;
+	}
+    }
+
   return result;
 }
 
@@ -1297,6 +1295,7 @@ static NSStringEncoding	defaultEncoding;
       if ([[destination stringByAppendingString: @"/"]
 	hasPrefix: [source stringByAppendingString: @"/"]])
 	{
+	  ASSIGN(_lastError, @"Could not link - destination is a descendant of source");
 	  return NO;
 	}
 
@@ -1350,7 +1349,8 @@ static NSStringEncoding	defaultEncoding;
   [self changeFileAttributes: attrs atPath: destination];
   return YES;
 #else
-  return NO;	// Links not supported on this platform
+  ASSIGN(_lastError, @"Links not supported on this platform");
+  return NO;
 #endif
 }
 
@@ -1378,6 +1378,7 @@ static NSStringEncoding	defaultEncoding;
   lpath = [self fileSystemRepresentationWithPath: path];
   if (lpath == 0 || *lpath == 0)
     {
+      ASSIGN(_lastError, @"Could not remove - no path");
       return NO;
     }
   else
@@ -1472,7 +1473,21 @@ static NSStringEncoding	defaultEncoding;
 {
   BOOL  result;
 
+  DESTROY(_lastError);
   result = [self removeFileAtPath: path handler: nil];
+
+  if (error != NULL)
+    {
+      if (NO == result)
+	{
+	  *error = [self _errorFrom: path to: nil];
+	}
+      else
+	{
+	  *error = nil;
+	}
+    }
+
   return result;
 }
 
@@ -1501,6 +1516,7 @@ static NSStringEncoding	defaultEncoding;
 
   if (lpath == 0 || *lpath == _NUL)
     {
+      ASSIGN(_lastError, @"no path given");
       return NO;
     }
 
@@ -1555,6 +1571,7 @@ static NSStringEncoding	defaultEncoding;
 
   if (lpath == 0 || *lpath == _NUL)
     {
+      ASSIGN(_lastError, @"no path given");
       return NO;
     }
 
@@ -1591,6 +1608,7 @@ static NSStringEncoding	defaultEncoding;
 
   if (lpath == 0 || *lpath == _NUL)
     {
+      ASSIGN(_lastError, @"no path given");
       return NO;
     }
 
@@ -1632,6 +1650,7 @@ static NSStringEncoding	defaultEncoding;
 
   if (lpath == 0 || *lpath == _NUL)
     {
+      ASSIGN(_lastError, @"no path given");
       return NO;
     }
 
@@ -1679,6 +1698,7 @@ static NSStringEncoding	defaultEncoding;
 
   if (lpath == 0 || *lpath == _NUL)
     {
+      ASSIGN(_lastError, @"no path given");
       return NO;
     }
 
@@ -1872,7 +1892,8 @@ static NSStringEncoding	defaultEncoding;
 				   error: (NSError**)error
 {
   NSDictionary	*d;
-  
+
+  DESTROY(_lastError);
   d = [GSAttrDictionaryClass attributesAt:
     [self fileSystemRepresentationWithPath: path] traverseLink: NO];
   
@@ -1880,7 +1901,7 @@ static NSStringEncoding	defaultEncoding;
     {
       if (nil == d)
 	{
-	  *error = [NSError _last];
+	  *error = [self _errorFrom: path to: nil];
 	}
       else
 	{
@@ -2013,6 +2034,7 @@ static NSStringEncoding	defaultEncoding;
   return [NSDictionary dictionaryWithObjects: values forKeys: keys count: 5];
 #else
   NSLog(@"NSFileManager", @"no support for filesystem attributes");
+  ASSIGN(_lastError, @"no support for filesystem attributes");
   return nil;
 #endif
 #endif /* MINGW */
@@ -2138,6 +2160,7 @@ static NSStringEncoding	defaultEncoding;
 
   return (symlink(oldpath, newpath) == 0);
 #else
+  ASSIGN(_lastError, @"symbolic links not supported on this system");
   return NO;
 #endif
 }
@@ -2162,6 +2185,7 @@ static NSStringEncoding	defaultEncoding;
       return nil;
     }
 #else
+  ASSIGN(_lastError, @"symbolic links not supported on this system");
   return nil;
 #endif
 }
@@ -2934,6 +2958,7 @@ static inline void gsedRelease(GSEnumeratedDirectory X)
   [pool drain];
   return YES;
 #else
+  ASSIGN(_lastError, @"Links not supported on this platform");
   return NO;
 #endif
 }
@@ -2981,6 +3006,57 @@ static inline void gsedRelease(GSEnumeratedDirectory X)
 	  shouldProceedAfterError: errorInfo];
     }
   return NO;
+}
+
+- (NSError*) _errorFrom: (NSString *)fromPath to: (NSString *)toPath
+{
+  NSError       *error;
+  NSDictionary  *errorInfo;
+  NSString      *message;
+  NSString      *domain;
+  NSInteger     code;
+
+  if (_lastError)
+    {
+      message = _lastError;
+      domain = NSCocoaErrorDomain;
+      code = 0;
+    }
+  else
+    {
+      error = [NSError _last];
+      message = [error localizedDescription];
+      domain = [error domain];
+      code = [error code];
+    }
+
+  if (fromPath && toPath)
+    {
+      errorInfo = [NSDictionary dictionaryWithObjectsAndKeys:
+        fromPath, @"FromPath",
+        toPath, @"ToPath",
+        message, NSLocalizedDescriptionKey,
+        nil];
+    }
+  else if (fromPath)
+    {
+      errorInfo = [NSDictionary dictionaryWithObjectsAndKeys:
+        fromPath, @"Path",
+        message, NSLocalizedDescriptionKey,
+        nil];      
+    }
+  else
+    {
+      errorInfo = [NSDictionary dictionaryWithObjectsAndKeys:
+        message, NSLocalizedDescriptionKey,
+        nil];      
+    }
+
+  error = [NSError errorWithDomain: domain
+                              code: code
+                          userInfo: errorInfo];
+  DESTROY(_lastError);
+  return error;
 }
 
 @end /* NSFileManager (PrivateMethods) */

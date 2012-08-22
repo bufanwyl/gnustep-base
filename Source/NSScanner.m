@@ -205,7 +205,7 @@ typedef GSString	*ivars;
     {
       _string = [_holder initWithString: aString];
     }
-  if (GSObjCIsKindOf(c, GSUnicodeStringClass) == YES)
+  else if (GSObjCIsKindOf(c, GSUnicodeStringClass) == YES)
     {
       _string = RETAIN(aString);
     }
@@ -1220,7 +1220,7 @@ GSScanInt(unichar *buf, unsigned length, int *result)
 }
 
 /**
- * Scan in a double value in the standard locale ('.' as decimal poNSInteger).<br />
+ * Scan in a double value in the standard locale ('.' as decimal point).<br />
  * Return YES on success, NO on failure.<br />
  * The value pointed to by result is unmodified on failure.<br />
  * No value is returned in result if it is a null pointer.

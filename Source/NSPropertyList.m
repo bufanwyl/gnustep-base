@@ -316,7 +316,15 @@ foundIgnorableWhitespace: (NSString *)string
     }
   else if ([elementName isEqualToString: @"integer"])
     {
-      ASSIGN(plist, [NSNumber numberWithLongLong: [value longLongValue]]);
+      if ([value hasPrefix: @"-"])
+        {
+          ASSIGN(plist, [NSNumber numberWithLongLong: [value longLongValue]]);
+        }
+      else
+        {
+          ASSIGN(plist, [NSNumber numberWithUnsignedLongLong:
+            (unsigned long long)[value longLongValue]]);
+        }
     }
   else if ([elementName isEqualToString: @"real"])
     {
@@ -467,8 +475,10 @@ foundIgnorableWhitespace: (NSString *)string
   unsigned int *table;
 }
 
-+ (void) serializePropertyList: (id)aPropertyList intoData: (NSMutableData *)destination;
-- (id) initWithPropertyList: (id)aPropertyList intoData: (NSMutableData *)destination;
++ (void) serializePropertyList: (id)aPropertyList
+                      intoData: (NSMutableData *)destination;
+- (id) initWithPropertyList: (id)aPropertyList
+                   intoData: (NSMutableData *)destination;
 - (void) generate;
 - (void) storeObject: (id)object;
 - (void) cleanup;
@@ -1130,7 +1140,21 @@ static id parsePlItem(pldata* pld)
 
 		    for (i = 0; i < len; i++) buf[i] = (char)ptr[i];
 		    buf[len] = '\0';
-		    result = [[NSNumber alloc] initWithLongLong: atoll(buf)];
+                    if ('-' == buf[0])
+                      {
+                        result = [[NSNumber alloc]
+                          initWithLongLong: atoll(buf)];
+                      }
+                    else
+                      {
+#if     defined(__MINGW__)
+                        result = [[NSNumber alloc]
+                          initWithUnsignedLongLong: _strtoui64(buf, 0, 10)];
+#else
+                        result = [[NSNumber alloc]
+                          initWithUnsignedLongLong: strtoull(buf, 0, 10)];
+#endif
+                      }
 		  }
 		else if (type == 'B')
 		  {
@@ -1250,13 +1274,17 @@ static id parsePlItem(pldata* pld)
 	result = parseUnquotedString(pld);
 	break;
     }
-  if (start == YES && result != nil)
+  if (YES == start && result != nil && nil == pld->err)
     {
       if (skipSpace(pld) == YES)
 	{
 	  pld->err = @"extra data after parsed string";
 	  result = nil;		// Not at end of string.
 	}
+      else
+        {
+	  pld->err = nil;       // end expcted
+        }
     }
   return result;
 }
@@ -2375,6 +2403,13 @@ static BOOL	classInitialized = NO;
   NSMutableData	*dest;
   NSDictionary	*loc;
   int		step = 2;
+
+  if (nil == aPropertyList)
+    {
+      [NSException raise: NSInvalidArgumentException
+                  format: @"[%@ +%@]: nil property list",
+        NSStringFromClass(self), NSStringFromSelector(_cmd)];
+    }
 
   loc = [[NSUserDefaults standardUserDefaults] dictionaryRepresentation];
   dest = [NSMutableData dataWithCapacity: 1024];
