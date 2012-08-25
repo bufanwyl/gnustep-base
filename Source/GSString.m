@@ -755,6 +755,13 @@ static BOOL useTinyStrings;
 @interface GSTinyString : NSString
 @end
 
+#ifdef GS_PROFILE_TINY_STRINGS
+static int tinyStrings = 0;
+static void logTinyStringCount(void)
+{
+	fprintf(stderr, "%d tiny strings created\n", tinyStrings);
+}
+#endif
 @implementation GSTinyString
 - (NSUInteger) length
 {
@@ -783,6 +790,9 @@ static BOOL useTinyStrings;
 + (void) load
 {
   useTinyStrings = objc_registerSmallObjectClass_np(self, TINY_STRING_MASK);
+#ifdef GS_PROFILE_TINY_STRINGS
+  atexit(logTinyStringCount);
+#endif
 }
 
 + (id) alloc
@@ -854,9 +864,20 @@ createTinyString(const char *str, int length)
   s |= length << TINY_STRING_LENGTH_SHIFT;
   for (i = 0 ; i<length ; i++)
     {
+      // If this is not a 7-bit character, we can't use it.
+      if (str[i] & 0x80) { return nil; }
       s |= ((uintptr_t)str[i]) << (57 - (i*7));
     }
+#ifdef GS_PROFILE_TINY_STRINGS
+  __sync_fetch_and_add(&tinyStrings, 1);
+#endif
   return (id)s;
+}
+#else
+static id
+createTinyString(const char *str, int length)
+{
+  return nil;
 }
 #endif
 /*
@@ -3731,6 +3752,15 @@ agree, create a new GSCInlineString otherwise.
 
 - (NSString*) substringFromRange: (NSRange)aRange
 {
+  if (!_flags.wide)
+    {
+      id tinyString = createTinyString((char*)_contents.c + aRange.location, aRange.length);
+
+      if (tinyString)
+      {
+        return tinyString;
+      }
+    }
   if (_flags.owned)
     {
       GS_RANGE_CHECK(aRange, _count);
@@ -3745,6 +3775,15 @@ agree, create a new GSCInlineString otherwise.
     {
       GS_RANGE_CHECK(aRange, _count);
       return substring_c((GSStr)self, aRange);
+    }
+  if (!_flags.wide)
+    {
+      id tinyString = createTinyString((char*)_contents.c + aRange.location, aRange.length);
+
+      if (tinyString)
+      {
+        return tinyString;
+      }
     }
   return [super substringWithRange: aRange];
 }
@@ -4048,6 +4087,15 @@ agree, create a new GSCInlineString otherwise.
 
 - (NSString*) substringFromRange: (NSRange)aRange
 {
+  if (!_flags.wide)
+    {
+      id tinyString = createTinyString((char*)_contents.c + aRange.location, aRange.length);
+
+      if (tinyString)
+      {
+        return tinyString;
+      }
+    }
   if (_flags.owned)
     {
       GS_RANGE_CHECK(aRange, _count);
@@ -4058,6 +4106,15 @@ agree, create a new GSCInlineString otherwise.
 
 - (NSString*) substringWithRange: (NSRange)aRange
 {
+  if (!_flags.wide)
+    {
+      id tinyString = createTinyString((char*)_contents.c + aRange.location, aRange.length);
+
+      if (tinyString)
+      {
+        return tinyString;
+      }
+    }
   if (_flags.owned)
     {
       GS_RANGE_CHECK(aRange, _count);
@@ -5064,6 +5121,14 @@ NSAssert(_flags.owned == 1 && _zone != 0, NSInternalInconsistencyException);
     }
   else
     {
+      id tinyString = createTinyString((char*)_contents.c + aRange.location, aRange.length);
+
+      if (tinyString)
+      {
+        return tinyString;
+      }
+    }
+    {
       GSCInlineString *o;
 
       o = [newCInline(aRange.length, [self zone]) autorelease];
@@ -5090,6 +5155,14 @@ NSAssert(_flags.owned == 1 && _zone != 0, NSInternalInconsistencyException);
       return o;
     }
   else
+    {
+      id tinyString = createTinyString((char*)_contents.c + aRange.location, aRange.length);
+
+      if (tinyString)
+      {
+        return tinyString;
+      }
+    }
     {
       GSCInlineString *o;
 
