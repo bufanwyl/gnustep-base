@@ -46,12 +46,6 @@
 #define GS_UNSAFE_REGEX 1
 #import "common.h"
 #include <stdio.h>
-#include <string.h>
-
-/* OpenBSD recommends impodring stdlib but not malloc.h for malloc */
-#ifdef HAVE_STDLIB_H
-#  include <stdlib.h>
-#endif
 
 #import "Foundation/NSAutoreleasePool.h"
 #import "Foundation/NSCalendarDate.h"
@@ -3351,11 +3345,7 @@ static UCollator *GSICUCollatorOpen(NSStringCompareOptions mask, NSLocale *local
     {
       uint64_t v;
 
-#if defined(__MINGW__)
-      v = _strtoui64(ptr, 0, 10);
-#else
       v = strtoul(ptr, 0, 10);
-#endif
       return (int)v;
     } 
 }
@@ -3376,11 +3366,7 @@ static UCollator *GSICUCollatorOpen(NSStringCompareOptions mask, NSLocale *local
     {
       uint64_t  v;
 
-#if defined(__MINGW__)
-      v = _strtoui64(ptr, 0, 10);
-#else
-      v = strtoull(ptr, 0, 10);
-#endif
+      v = (uint64_t)strtoull(ptr, 0, 10);
       return (NSInteger)v;
     } 
 }
@@ -3401,11 +3387,7 @@ static UCollator *GSICUCollatorOpen(NSStringCompareOptions mask, NSLocale *local
     {
       unsigned long long l;
 
-#if defined(__MINGW__)
-      l = _strtoui64(ptr, 0, 10);
-#else
       l = strtoull(ptr, 0, 10);
-#endif
       return (long long)l;
     } 
 }
@@ -3846,33 +3828,7 @@ static NSFileManager *fm = nil;
   unsigned	root;
   unichar	buf[length+aLength+1];
 
-  /* If the 'component' has a leading path separator (or drive spec
-   * in windows) then we need to find its length so we can strip it.
-   */
   root = rootOf(aString, aLength);
-  if (root > 0)
-    {
-      unichar c = [aString characterAtIndex: 0];
-
-      if (c == '~')
-        {
-	  root = 0;
-	}
-      else if (root > 1 && pathSepMember(c))
-        {
-	  int	i;
-
-	  for (i = 1; i < root; i++)
-	    {
-	      c = [aString characterAtIndex: i];
-	      if (!pathSepMember(c))
-	        {
-		  break;
-		}
-	    }
-	  root = i;
-	}
-    }
 
   if (length == 0)
     {
@@ -3881,6 +3837,33 @@ static NSFileManager *fm = nil;
     }
   else
     {
+      /* If the 'component' has a leading path separator (or drive spec
+       * in windows) then we need to find its length so we can strip it.
+       */
+      if (root > 0)
+	{
+	  unichar c = [aString characterAtIndex: 0];
+
+	  if (c == '~')
+	    {
+	      root = 0;
+	    }
+	  else if (root > 1 && pathSepMember(c))
+	    {
+	      int	i;
+
+	      for (i = 1; i < root; i++)
+		{
+		  c = [aString characterAtIndex: i];
+		  if (!pathSepMember(c))
+		    {
+		      break;
+		    }
+		}
+	      root = i;
+	    }
+	}
+
       [self getCharacters: buf range: ((NSRange){0, length})];
 
       /* We strip back trailing path separators, and replace them with
@@ -3912,36 +3895,42 @@ static NSFileManager *fm = nil;
       root = rootOf(self, originalLength);
     }
 
-  // Trim trailing path separators
-  while (length > 1 && pathSepMember(buf[length-1]) == YES)
-    {
-      length--;
-    }
-
-  /* Trim multi separator sequences outside root (root may contain an
-   * initial // pair if it is a windows UNC path).
-   */
   if (length > 0)
     {
+      /* Trim trailing path separators as long as they are not part of
+       * the root. 
+       */
       aLength = length - 1;
-      while (aLength > root)
+      while (aLength > root && pathSepMember(buf[aLength]) == YES)
 	{
-	  if (pathSepMember(buf[aLength]) == YES)
-	    {
-	      buf[aLength] = pathSepChar();
-	      if (pathSepMember(buf[aLength-1]) == YES)
-		{
-		  unsigned	pos;
-
-		  buf[aLength-1] = pathSepChar();
-		  for (pos = aLength+1; pos < length; pos++)
-		    {
-		      buf[pos-1] = buf[pos];
-		    }
-		  length--;
-		}
-	    }
 	  aLength--;
+	  length--;
+	}
+
+      /* Trim multi separator sequences outside root (root may contain an
+       * initial // pair if it is a windows UNC path).
+       */
+      if (length > 0)
+	{
+	  while (aLength > root)
+	    {
+	      if (pathSepMember(buf[aLength]) == YES)
+		{
+		  buf[aLength] = pathSepChar();
+		  if (pathSepMember(buf[aLength-1]) == YES)
+		    {
+		      unsigned	pos;
+
+		      buf[aLength-1] = pathSepChar();
+		      for (pos = aLength+1; pos < length; pos++)
+			{
+			  buf[pos-1] = buf[pos];
+			}
+		      length--;
+		    }
+		}
+	      aLength--;
+	    }
 	}
     }
   return [NSStringClass stringWithCharacters: buf length: length];

@@ -1,3 +1,136 @@
+2012-09-10  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Headers/Foundation/NSDate.h: Declare new OSX method to add time
+        interval to a date.
+        * Source/NSDate.m: Implement it
+        * Source/NSCalendarDate.m: Ditto
+        * Source/NSRunLoop.m: Add exception handling for run loop performer.
+
+2012-09-10  Sergii Stoian <stoyan255@gmail.com>
+
+        * Source/NSFileManager.m:
+        [createDirectoryAtPath:withIntermediateDirectories:attributes:error:]:
+        Create directories only if it doesn't exist.
+
+2012-09-09  Wolfgang Lux  <wolfgang.lux@gmail.com>
+
+        * Source/NSPropertyList.m (-storeString): Add missing variable
+        declaration on big-endian systems.
+
+2012-09-06  Richard Frith-Macdonald <rfm@gnu.org>
+
+	* Source/NSPropertyList.m:
+        Don't ignore whitespace in keys and values when parsing XML ... the
+        DTD says everything apart from array and dict contains #PCDATA.
+
+2012-09-05  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSScanner.m: Compatibility tweak reported by hns@computer.org
+        A string like '1.2eX' where X is not a numeric exponent, needs to be
+        scanned as a float/double up to (but not including) the 'e' (or 'E')
+        rather than being treated as a badly formatted float/double.
+
+2012-09-04  Fred Kiefer <FredKiefer@gmx.de>
+
+	* Tests/base/NSXMLDocument/cdata.m: New test case for CDATA.
+
+2012-09-03  Richard Frith-Macdonald <rfm@gnu.org>
+
+	* Source/NSTimeZone.m:
+	* Source/NSBundle.m:
+	* Source/NSPropertyList.m:
+	* Source/NSProcessInfo.m:
+	* Source/NSSocketPort.m:
+	* Source/NSRunLoop.m:
+	* Source/NSMessagePortNameServer.m:
+	* Source/NSDistributedLock.m:
+	* Source/GSHTTPURLHandle.m:
+	* Source/NSZone.m:
+	* Source/NSPage.m:
+	* Source/NSMessagePort.m:
+	* Source/NSUnarchiver.m:
+	* Source/win32/GSFileHandle.m:
+	* Source/NSFileManager.m:
+	* Source/common.h:
+	* Source/NSString.m:
+	* Source/Additions/NSData+GNUstepBase.m:
+	* Source/Additions/Unicode.m:
+	* Source/Additions/NSMutableString+GNUstepBase.m:
+	* Source/Additions/NSError+GNUstepBase.m:
+	* Source/Additions/GSMime.m:
+	* Source/Additions/NSString+GNUstepBase.m:
+	* Source/Additions/GCArray.m:
+	* Source/Additions/GSXML.m:
+	* Source/Additions/NSNumber+GNUstepBase.m:
+	* Source/Additions/GSObjCRuntime.m:
+	* Source/GSString.m:
+	* Source/NSObjCRuntime.m:
+	* Source/GSFormat.m:
+	* Source/GSFileHandle.m:
+	* Source/NSTask.m:
+	On windows with mingw we can use strtoull() rather than _strtoui64().
+	Also, remove redundant header includes since string.h is in common.h
+
+2012-09-03  Niels Grewe <niels.grewe@halbordnung.de>
+
+	* configure.ac: Fallback to the non icu-config check for ICU in
+	the general case.
+	* configure: Regenerate.
+
+2012-09-01  Niels Grewe <niels.grewe@halbordnung.de>
+
+	* configure.ac: Implement `--disable-icu-config' switch to
+	configure for platforms that ship libicu but not icu-config.
+	* configure: Regenerate.
+
+2012-08-27  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSSstring.m: ([-stringByAppendingPathComponent:]) fix for
+	append to an empty string with a windows path as an argument.
+
+2012-08-26  Niels Grewe <niels.grewe@halbordnung.de>
+
+	*  configure.ac: Check for sys/filio.h and whether we need to
+	link libsocket (as on QNX).
+	*  configure
+	*  SSL/configure
+	*  Headers/GNUstepBase/config.h.in:
+	Regenerate.
+	*  Source/common.h
+	*  Source/GSFileHandle.m
+	*  Source/NSMessagePort.m
+	*  Source/NSSocketPort.m
+	*  Source/NSThread.m
+	*  SSL/GSSSLHandle.m:
+	QNX compatibility tweaks.
+	*  Tools/gdnc.m
+	*  Tools/gdomap.c:
+	Use slog facility for logging on QNX.
+
+	Compatibility improvements for building for QNX.
+
+2012-08-26  Niels Grewe <niels.grewe@halbordnung.de>
+
+	* configure.ac: Check for QNX slog facilities.
+	* Headers/GNUstepBase/config.h.in
+	* configure:
+	Regenerate
+	* Source/NSLog.m: Implement logging to the QNX slog.
+
+	Add support for logging to the QNX slog via NSLog().
+
+2012-08-25  Niels Grewe <niels.grewe@halbordnung.de>
+
+	* configure.ac: Allow a cross-compilation configuration to be
+	specified using the `--with-cross-compilation-info=' switch.
+	Tweak configure script to behave gracefully when
+	cross-compiling.
+	* configure: Regenerate.
+	* cross.config: Add default values for cross-compilation.
+
+	Make the configure script behave more friendly when
+	cross-compiling.
+
 2012-08-16  Niels Grewe <niels.grewe@halbordnung.de>
 
 	* configure.ac: Check for objc_root_class attribute
@@ -3131,8 +3264,8 @@
 	* Source/NSBundle.m: ([+initialize]) change to use 'right' path
 	handling so that our core paths are established correctly even if
 	an app has set the wrong path handling mode for the currenty platform.
-	* Tests\base\NSURL\basic.m:
-	* Tests\base\NSString\test02.m:
+	* Tests/base/NSURL/basic.m:
+	* Tests/base/NSString/test02.m:
 	Fix path portability bugs in tests.
 
 2011-04-03  Richard Frith-Macdonald <rfm@gnu.org>
@@ -3742,24 +3875,24 @@
 
 2011-02-23  Richard Frith-Macdonald <rfm@gnu.org>
 
-	* Source\NSCalendarDate.m:
-	* Source\NSArray.m:
-	* Source\NSDebug.m:
-	* Source\NSCalendar.m:
-	* Source\NSURLResponse.m:
-	* Source\NSObject.m:
-	* Source\NSDecimalNumber.m:
-	* Source\Additions\GSMime.m:
-	* Source\NSDateFormatter.m:
-	* Source\NSDate.m:
-	* Source\NSDictionary.m:
-	* Source\NSSet.m:
-	* Headers\Foundation\NSCalendarDate.h:
-	* Headers\Foundation\NSDecimalNumber.h:
-	* Headers\Foundation\NSDate.h:
-	* Headers\Foundation\NSArray.h:
-	* Headers\Foundation\NSDictionary.h:
-	* Headers\Foundation\NSSet.h:
+	* Source/NSCalendarDate.m:
+	* Source/NSArray.m:
+	* Source/NSDebug.m:
+	* Source/NSCalendar.m:
+	* Source/NSURLResponse.m:
+	* Source/NSObject.m:
+	* Source/NSDecimalNumber.m:
+	* Source/Additions/GSMime.m:
+	* Source/NSDateFormatter.m:
+	* Source/NSDate.m:
+	* Source/NSDictionary.m:
+	* Source/NSSet.m:
+	* Headers/Foundation/NSCalendarDate.h:
+	* Headers/Foundation/NSDecimalNumber.h:
+	* Headers/Foundation/NSDate.h:
+	* Headers/Foundation/NSArray.h:
+	* Headers/Foundation/NSDictionary.h:
+	* Headers/Foundation/NSSet.h:
 	Tweaks to avoid compiler warnings on mingw and to make the
 	-descriptionWithLocale: method consistently take an id argument
 	as it now does on OSX.
@@ -5479,7 +5612,7 @@
 	* Tools/AGSParser.h:
 	* Tools/AGSParser.m:
 	(-canWrapWithParagraphMarkup:, -generateParagraphMarkupForString:):
-	Tweaked paragraph generation to ignore \n\n sequences inside <example>
+	Tweaked paragraph generation to ignore /n/n sequences inside <example>
 	markup.
 	(-parseDeclaration): Added enum documentation parsing.
 
@@ -5545,7 +5678,7 @@
 	* Tools/autogsdoc.m:
 	* Tools/AGSParser.m:
 	Added the ability to generate paragraph markup. Turned off by default.
-	For each paragraph break ('\n\n' sequence) and when no incompatible
+	For each paragraph break ('/n/n' sequence) and when no incompatible
 	elements exist in the scanned paragraph, <p> tags can be automatically
 	inserted (more explanations in -canWrapWithParagraphMarkup: doc).
 
@@ -6172,7 +6305,7 @@
 2010-04-07 Doug Simons <doug.simons@testplant.com>
 
 	* Source/NSPathUtilities.m: Prefer USERPROFILE for the
-	NSHomeDirectory() on Windows if HOMEPATH is set to '\'.
+	NSHomeDirectory() on Windows if HOMEPATH is set to '/'.
 
 2010-04-07 Richard Frith-Macdonald <rfm@gnu.org>
 
@@ -7349,7 +7482,7 @@
 	* Source/NSPropertyList.m: Revert last change, which broke XML
 	generation by placing illegal character entities in the output.
 	Fix menu position problem by adding missing code to unescape
-	the \U escapes we put in the output when we read back in again.
+	the /U escapes we put in the output when we read back in again.
 	NB. should check that we use character entities for all legal
 	characters and only use the escape mechanism for *really* illegal
 	ones (such as the menu location key).
@@ -7524,13 +7657,13 @@
 
 2009-09-27 Richard Frith-Macdonald <rfm@gnu.org>
 
-	* Source\win32\GSFileHandle.m:
-	* Source\win32\NSMessagePort.m:
-	* Source\win32\GSRunLoopCtxt.m:
-	* Source\win32\NSStream.m:
-	* Source\win32\NSMessagePortNameServer.m:
-	* Source\NSPipe.m:
-	* Source\NSTask.m:
+	* Source/win32/GSFileHandle.m:
+	* Source/win32/NSMessagePort.m:
+	* Source/win32/GSRunLoopCtxt.m:
+	* Source/win32/NSStream.m:
+	* Source/win32/NSMessagePortNameServer.m:
+	* Source/NSPipe.m:
+	* Source/NSTask.m:
 	Fixes to try and improve subtask handling on windows.
 	1. change scheme to create all handles as not inheritable, and
 	just make the handles we want the child to have inheritable while
@@ -8128,7 +8261,7 @@
 2009-05-16 Richard Frith-Macdonald <rfm@gnu.org>
 
 	* Source/NSURL.m: Add support for file URLs on mswindows.  The path
-	may be of the form C:\... rather than /... (and the colon might be
+	may be of the form C:/... rather than /... (and the colon might be
 	a vertical bar).
 	Also makefile fixes for bug #26446
 
@@ -8376,13 +8509,13 @@
 
 2009-03-18  Richard Frith-Macdonald <rfm@gnu.org>
 
-	* Source\win32\GSFileHandle.m:
-	* Source\win32\NSMessagePort.m:
-	* Source\win32\NSMessagePortNameServer.m:
-	* Source\NSConcreteMapTable.m:
-	* Source\Additions\GSCompatibility.m:
-	* Source\Additions\GSCategories.m:
-	* Source\NSData.m:
+	* Source/win32/GSFileHandle.m:
+	* Source/win32/NSMessagePort.m:
+	* Source/win32/NSMessagePortNameServer.m:
+	* Source/NSConcreteMapTable.m:
+	* Source/Additions/GSCompatibility.m:
+	* Source/Additions/GSCategories.m:
+	* Source/NSData.m:
 	Fixes for windows and changes to GC code, plus changes for old
 	compilers which don't support anonymous unions, plus improvement
 	to error reporting on windows, plus fix to correctly rename

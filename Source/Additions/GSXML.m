@@ -46,7 +46,6 @@
 #ifndef	_XOPEN_SOURCE
 #define	_XOPEN_SOURCE 600
 #endif
-#include <string.h>
 #include <stdio.h>
 
 
@@ -4694,14 +4693,14 @@ static void indentation(unsigned level, NSMutableString *str)
   BOOL		compact = [rpc compact];
 
   INDENT(indent);
-  if (strchr("cCsSiIlL", *t) != 0)
+  if (strchr("cCsSiIlLqQ", *t) != 0)
     {
       int64_t	i = [self longLongValue];
 
       if ((i & 0xffffffff) != i)
 	{
 	  [NSException raise: NSInternalInconsistencyException
-		      format: @"Can't encode %"PRId64" as i4"];
+		      format: @"Can't encode %"PRId64" as i4", i];
 	}
       if ((i == 0 || i == 1) && (*t == 'c' || *t == 'C'))
         {
