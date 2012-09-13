@@ -11,6 +11,11 @@
 #import <GNUstepBase/NSObject+GNUstepBase.h>
 #import "GSFastEnumeration.h"
 
+/* Boolean constants.
+ */
+static id       boolN;
+static id       boolY;
+
 /**
  * The number of (unicode) characters to fetch from the source at once.
  */
@@ -614,7 +619,7 @@ parseValue(ParserState *state)
 	    && (consumeChar(state) == 'e'))
             {
 	      consumeChar(state);
-              return [[NSNumber alloc] initWithBool: YES];
+              return [boolY retain];
             }
           break;
         }
@@ -626,7 +631,7 @@ parseValue(ParserState *state)
 	    && (consumeChar(state) == 'e'))
             {
 	      consumeChar(state);
-              return [[NSNumber alloc] initWithBool: NO];
+              return [boolN retain];
             }
           break;
         }
@@ -710,8 +715,11 @@ getEncoding(const uint8_t BOM[4], ParserState *state)
 /**
  * Classes that are permitted to be written.  
  */
-static Class NSNullClass, NSArrayClass, NSStringClass, NSDictionaryClass,
-             NSNumberClass;
+static Class NSArrayClass;
+static Class NSDictionaryClass;
+static Class NSNullClass;
+static Class NSNumberClass;
+static Class NSStringClass;
 
 static NSCharacterSet *escapeSet;
 
@@ -780,57 +788,100 @@ writeObject(id obj, NSMutableString *output, NSInteger tabs)
     }
   else if ([obj isKindOfClass: NSStringClass])
     {
-      NSRange r = [obj rangeOfCharacterFromSet: escapeSet];
-      if (r.location != NSNotFound)
-        {
-          NSMutableString *str = [obj mutableCopy];
-          NSCharacterSet *controlSet = [NSCharacterSet controlCharacterSet];
-          [str replaceOccurrencesOfString: @"\\"
-                               withString: @"\\\\"
-                                  options: 0
-                                    range: NSMakeRange(0, [str length])];
-          [str replaceOccurrencesOfString: @"\""
-                               withString: @"\\\""
-                                  options: 0
-                                    range: NSMakeRange(0, [str length])];
-          r = [str rangeOfCharacterFromSet: controlSet];
-          while (r.location != NSNotFound)
-            {
-              unichar control = [str characterAtIndex: r.location];
-              NSString *escaped;
+      NSString  *str = (NSString*)obj;
+      unsigned	length = [str length];
 
-              escaped = [[NSString alloc] initWithFormat: @"\\u%.4d",
-		(int)control];
-              [str replaceCharactersInRange: r
-                                 withString: escaped];
-              [escaped release];
-              r = [str rangeOfCharacterFromSet: controlSet];
-            }
-          [output appendFormat: @"\"%@\"", str];
-          [str release];
+      if (length == 0)
+        {
+          [output appendString: @"\"\""];
         }
       else
         {
-          [output appendFormat: @"\"%@\"", obj];
+          unsigned	size = 2;
+          unichar	*from;
+          unsigned	i = 0;
+          unichar	*to;
+          unsigned	j = 0;
+
+          from = NSZoneMalloc (NSDefaultMallocZone(), sizeof(unichar) * length);
+          [str getCharacters: from];
+
+          for (i = 0; i < length; i++)
+            {
+              unichar	c = from[i];
+
+              if (c == '"' || c == '\\' || c == '\b'
+                || c == '\f' || c == '\n' || c == '\r' || c == '\t')
+                {
+                  size += 2;
+                }
+              else if (c < 0x20)
+                {
+                  size += 6;
+                }
+              else
+                {
+                  size++;
+                }
+            }
+
+          to = NSZoneMalloc (NSDefaultMallocZone(), sizeof(unichar) * size);
+          to[j++] = '"';
+          for (i = 0; i < length; i++)
+            {
+              unichar	c = from[i];
+
+              if (c == '"' || c == '\\' || c == '\b'
+                || c == '\f' || c == '\n' || c == '\r' || c == '\t')
+                {
+                  to[j++] = '\\';
+                  switch (c)
+                    {
+                      case '\\': to[j++] = '\\'; break;
+                      case '\b': to[j++] = 'b'; break;
+                      case '\f': to[j++] = 'f'; break;
+                      case '\n': to[j++] = 'n'; break;
+                      case '\r': to[j++] = 'r'; break;
+                      case '\t': to[j++] = 't'; break;
+                      default: to[j++] = '"'; break;
+                    }
+                }
+              else if (c < 0x20)
+                {
+                  char	buf[5];
+
+                  to[j++] = '\\';
+                  to[j++] = 'u';
+                  sprintf(buf, "%04x", c);
+                  to[j++] = buf[0];
+                  to[j++] = buf[1];
+                  to[j++] = buf[2];
+                  to[j++] = buf[3];
+                }
+              else
+                {
+                  to[j++] = c;
+                }
+            }
+          to[j] = '"';
+          str = [[NSStringClass alloc] initWithCharacters: to length: size];
+          NSZoneFree (NSDefaultMallocZone (), to);
+          NSZoneFree (NSDefaultMallocZone (), from);
+          [output appendString: str];
+          [str release];
         }
+    }
+  else if (obj == boolN)
+    {
+      [output appendString: @"false"];
+    }
+  else if (obj == boolY)
+    {
+      [output appendString: @"true"];
     }
   else if ([obj isKindOfClass: NSNumberClass])
     {
-      if ([obj objCType][0] == @encode(BOOL)[0])
-        {
-          if ([obj boolValue])
-            {
-              [output appendString: @"true"];
-            }
-          else
-            {
-              [output appendString: @"false"];
-            }
-        }
-      else
-        {
-          [output appendFormat: @"%g", [obj doubleValue]];
-        }
+      [output appendFormat: @"%g", [obj doubleValue]];
     }
   else if ([obj isKindOfClass: NSNullClass])
     {
@@ -853,7 +904,8 @@ writeObject(id obj, NSMutableString *output, NSInteger tabs)
   NSNumberClass = [NSNumber class];
   escapeSet
     = [[NSCharacterSet characterSetWithCharactersInString: @"\"\\"] retain];
-
+  boolN = [[NSNumber numberWithBool: NO] retain];
+  boolY = [[NSNumber numberWithBool: YES] retain];
 }
 
 + (NSData*) dataWithJSONObject: (id)obj

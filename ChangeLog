@@ -1,5 +1,16 @@
 2012-09-10  Richard Frith-Macdonald <rfm@gnu.org>
 
+        * Source/NSJSONSerialization.m:
+        Fix quoting of string output by copying code from WebServices library.
+
+2012-09-10  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSJSONSerialization.m:
+        * Source/NSPropertyList.m:
+        Improve serialisation of booleans.
+
+2012-09-10  Richard Frith-Macdonald <rfm@gnu.org>
+
         * Headers/Foundation/NSDate.h: Declare new OSX method to add time
         interval to a date.
         * Source/NSDate.m: Implement it
