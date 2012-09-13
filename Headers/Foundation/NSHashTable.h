@@ -62,6 +62,7 @@ typedef NSUInteger NSHashTableOptions;
 + (id) hashTableWithOptions: (NSPointerFunctionsOptions)options;
 
 + (id) hashTableWithWeakObjects;
++ (id) weakObjectsHashTable;
 
 - (id) initWithOptions: (NSPointerFunctionsOptions)options
 	      capacity: (NSUInteger)initialCapacity;

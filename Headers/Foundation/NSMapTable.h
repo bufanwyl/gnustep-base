@@ -69,21 +69,25 @@ typedef NSUInteger NSMapTableOptions;
  * using object keys.
  */
 + (id) mapTableWithStrongToStrongObjects;
++ (id) strongToStrongObjectsMapTable;
 
 /** Convenience method for creating a map table to store non-retained
  * object values with retained object keys.
  */
 + (id) mapTableWithStrongToWeakObjects;
++ (id) strongToWeakObjectsMapTable;
 
 /** Convenience method for creating a map table to store retained
  * object values with non-retained object keys.
  */
 + (id) mapTableWithWeakToStrongObjects;
++ (id) weakToStrongObjectsMapTable;
 
 /** Convenience method for creating a map table to store non-retained
  * object values with non-retained object keys.
  */
 + (id) mapTableWithWeakToWeakObjects;
++ (id) weakToWeakObjectsMapTable;
 
 /** Initialiser using option bitmasks to describe the keys and values.
  */

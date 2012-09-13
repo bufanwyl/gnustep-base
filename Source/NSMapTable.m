@@ -71,6 +71,34 @@ static Class	concreteClass = 0;
   return AUTORELEASE(t);
 }
 
++ (id) strongToStrongObjectsMapTable
+{
+  return [self mapTableWithKeyOptions: NSPointerFunctionsObjectPersonality
+			 valueOptions: NSPointerFunctionsObjectPersonality];
+}
+
++ (id)strongToWeakObjectsMapTable
+{
+  return [self mapTableWithKeyOptions: NSPointerFunctionsObjectPersonality
+			 valueOptions: NSPointerFunctionsObjectPersonality
+    | NSPointerFunctionsZeroingWeakMemory];
+}
+
++ (id)weakToStrongObjectsMapTable
+{
+  return [self mapTableWithKeyOptions: NSPointerFunctionsObjectPersonality
+    | NSPointerFunctionsZeroingWeakMemory
+			 valueOptions: NSPointerFunctionsObjectPersonality];
+}
+
++ (id)weakToWeakObjectsMapTable
+{
+  return [self mapTableWithKeyOptions: NSPointerFunctionsObjectPersonality
+    | NSPointerFunctionsZeroingWeakMemory
+			 valueOptions: NSPointerFunctionsObjectPersonality
+    | NSPointerFunctionsZeroingWeakMemory];
+}
+
 + (id) mapTableWithStrongToStrongObjects
 {
   return [self mapTableWithKeyOptions: NSPointerFunctionsObjectPersonality
