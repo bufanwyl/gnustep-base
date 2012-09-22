@@ -290,7 +290,7 @@ NSIsEmptyRect(NSRect aRect) GS_GEOM_ATTR;
 GS_GEOM_SCOPE BOOL
 NSIsEmptyRect(NSRect aRect)
 {
-  return ((NSWidth(aRect) <= 0) || (NSHeight(aRect) <= 0)) ? YES : NO;
+  return ((NSWidth(aRect) > 0) && (NSHeight(aRect) > 0)) ? NO : YES;
 }
 
 /** Modify a Copy of a Rectangle... **/
