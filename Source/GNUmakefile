@@ -158,16 +158,19 @@ GSBlocks.m \
 GSConcreteValue.m \
 GSCountedSet.m \
 GSDictionary.m \
-GSFormat.m \
 GSFTPURLHandle.m \
+GSFormat.m \
 GSHTTPAuthentication.m \
 GSHTTPURLHandle.m \
+GSICUString.m \
+GSQuickSort.m \
 GSRunLoopWatcher.m \
 GSSet.m \
+GSShellSort.m \
 GSSocketStream.m \
 GSStream.m \
 GSString.m \
-GSICUString.m \
+GSTimSort.m \
 GSValue.m \
 NSAffineTransform.m \
 NSArchiver.m \
@@ -410,6 +413,7 @@ NSRange.h \
 NSRegularExpression.h\
 NSRunLoop.h \
 NSScanner.h \
+NSScriptWhoseTests.h \
 NSSerialization.h \
 NSSet.h \
 NSSortDescriptor.h \

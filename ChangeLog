@@ -1,3 +1,111 @@
+2012-09-21  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSArray.m:
+        * Source/NSDate.m:
+        * Source/NSDictionary.m:
+        * Headers/Foundation/NSArray.h:
+        Comment/documentation fixups to avoid warnings etc.
+        * Tools/AGSParser.h:
+        * Tools/AGSParser.m:
+        Fix memory management error causing reference to deallocated object.
+
+2012-09-20  Niels Grewe <niels.grewe@halbordnung.de>
+
+	* Source/GSTimSort.m: A few more timsort bugfixes.
+
+2012-09-20  Niels Grewe <niels.grewe@halbordnung.de>
+
+	* Source/GSTimSort.m: Fix bugs in the timsort implementation.
+
+2012-09-20  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/GSQuickSort.m: Fixed this to compile and (apparently) work.
+
+2012-09-20  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * configure.ac: Change sort selection to use shellsort by default and
+        to make sort selection internal to gnustep-base rather than public.
+        * configure: regenerate
+        * Headers/GNUstepBase/config.h.in: regenerate
+        * Headers/GNUstepBase/GSConfig.h.in: Remove public sort selection info
+        * Source/GSQuickSort.m: Use config.h to control build/not-build.
+        * Source/NSSortDescriptor.m: Reference the selected sort class to
+        ensure that it is linked in  and loaded at runtime.
+        * Source/GSShellSort.m: Fix bug in function arguments.
+        Use config.h to control build/not-build.
+        * Source/GSSorting.h: tidied a little
+        * Source/GSTimSort.m: Use config.h to control build/not-build.
+        The changes are basically to keep sort information internal to
+        base rather than exposing it and, more importantly, to get sorting
+        working again.  This involves:
+        1. minor fix to shellsort to get it to work.
+        2. change configure script to select shellsort.
+        The problems with the other sorts are:
+        a. quicksort won't even compile
+        b. timsort does compile, but segfaults when you try to give it
+        real-world datasets to sort
+        Anyone wantng to fix these, please do (it would be really cool
+        to have timsort working).
+
+2012-09-19  Niels Grewe <niels.grewe@halbordnung.de>
+	* Source/GSSorting.h
+	* Source/NSSortDescriptor.m:
+	Add new generic interface for sorting.
+	* Source/GSTimSort.m: Implement timsort sorting algorithm.
+	* Source/GSQuickSort.m
+	* Source/GSShellSort.m:
+	Factor out previously used sorting algorithms. 
+	* Source/GSArray.m
+	* Source/NSArray.m:
+	Modify to use the new sorting interface for sorting using
+	functions, NSSortDescriptor, and NSComparator. Implement
+	NSComparator based sorting and insertion index searching
+	methods.
+	* Source/GNUmakefile: Connect new files to the build.
+	* configure.ac: Add configure switch to allow selection of sort
+	algorithm.
+	* Headers/GNUstepBase/GSConfig.h.in: Add defines for sort
+	algorithm selection.
+	* configure: Regenerate
+	* Headers/Foundation/NSObjCRuntime.h
+	* Headers/Foundation/NSArray.h:
+	Declarations for new NSComparator based sorting methods.
+	* Tests/base/NSArray/general.m
+	* Tests/base/NSArray/blocks.m:
+	Add tests for new functionality.
+	* Tests/base/NSArray/random.plist
+	* Tests/base/NSArray/sorted.plist:
+	Add sorting example data that is large enough to test more
+	sophisticated sorting algorithms. 
+
+	Completely overhaul how we do sorting in -base. GSSorting.h now
+	defines an interface that can be used for all sorting tasks in
+	the library. The actual sort algorithms to use are now plugable.
+	Timsort is the new default sorting algorithm, the existing
+	algorithms, shellsort and quicksort can still be selected using
+	a configure switch, but they do not override timsort completely
+	because they are unstable.
+	Also implement the new NSComparator (blocks) based sorting and
+	insertion index searching methods for NSMutableArray and
+	NSArray.
+
+2012-09-17 12:03-EDT Gregory John Casamento <greg.casamento@gmail.com>
+	Merged from the testplant branch.
+
+	* Headers/Foundation/Foundation.h
+	* Headers/Foundation/NSScriptWhoseTests.h
+	* Source/GNUmakefile
+	* Source/NSObject+NSComparisonMethods.m: Move the
+	comparison methods to the header for NSScriptWhoseTests.h,
+	but don't define the abstract class since we don't support
+	Apple script.
+
+2012-09-16  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSURL.m:
+        * Tests/base/NSURL/basic.m:
+        Add support for data: URL
+
 2012-09-10  Richard Frith-Macdonald <rfm@gnu.org>
 
         * Source/NSJSONSerialization.m:
