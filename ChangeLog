@@ -1,3 +1,19 @@
+2012-09-24  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Headers/Foundation/NSFileHandle.h: deprecate old method for setting
+        certificate and add new one.
+        * SSL/GSSSLHandle.m: Support new method and move generic code to
+        NSFileHandle.m
+        * Source/GSSocketStream.m: Implement NSFileHandle SSL/TLS support
+        using GNUTLS.
+        * Source/NSFileHandle.m: Some ssl/tls restructuring, use GNUTLS if
+        available.
+        * configure.ac: Don't build SSL bundle if isupport is built-in.
+        * GNUmakefile: ditto
+        * base.make.in: ditto ... plus fix to define setting to show whether
+        ICU is avaiable.
+        * configure: regenerate
+
 2012-09-23  Niels Grewe <niels.grewe@halbordnung.de>
 
 	* Source/GSSocketStream.m: Expose GSFileHandle ivars for compilation
