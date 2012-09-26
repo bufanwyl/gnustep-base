@@ -29,10 +29,13 @@
 #define	EXPOSE_NSFileHandle_IVARS	1
 #import "Foundation/NSData.h"
 #import "Foundation/NSFileHandle.h"
+#import "Foundation/NSException.h"
 #import "Foundation/NSPathUtilities.h"
 #import "GNUstepBase/NSObject+GNUstepBase.h"
 #import "GSPrivate.h"
 #import "GSNetwork.h"
+
+#define	EXPOSE_GSFileHandle_IVARS	1
 #import "GSFileHandle.h"
 
 // GNUstep Notification names
@@ -844,15 +847,15 @@ NSString * const NSFileHandleOperationException
   opts = [NSMutableDictionary dictionaryWithCapacity: 3];
   if (nil != certFile)
     {
-      [opts setObject: certFile forKey: GSTLSCertificateFileKey];
+      [opts setObject: certFile forKey: GSTLSCertificateFile];
     }
   if (nil != privateKey)
     {
-      [opts setObject: privateKey forKey: GSTLSPrivateKeyFileKey];
+      [opts setObject: privateKey forKey: GSTLSCertificateKeyFile];
     }
   if (nil != PEMpasswd)
     {
-      [opts setObject: PEMpasswd forKey: GSTLSPrivateKeyPasswordKey];
+      [opts setObject: PEMpasswd forKey: GSTLSCertificateKeyPassword];
     }
   err = [self sslSetOptions: opts];
   if (nil != err)
@@ -867,4 +870,167 @@ NSString * const NSFileHandleOperationException
 }
 
 @end
+
+#if     defined(HAVE_GNUTLS)
+
+#import "GSTLS.h"
+
+#if	!defined(__MINGW__)
+
+@interface      GSTLSHandle : GSFileHandle
+{
+@public
+  NSDictionary  *opts;
+  GSTLSSession  *session;
+}
+- (void) sslDisconnect;
+- (BOOL) sslHandshakeEstablished: (BOOL*)result outgoing: (BOOL)isOutgoing;
+- (NSString*) sslSetOptions: (NSDictionary*)options;
+@end
+
+
+/* Callback to allow the TLS code to pull data from the remote system.
+ * If the operation fails, this sets the error number.
+ */
+static ssize_t
+GSTLSHandlePull(gnutls_transport_ptr_t handle, void *buffer, size_t len)
+{
+  ssize_t       result = 0;
+  GSTLSHandle   *tls = (GSTLSHandle*)handle;
+  int           descriptor = [tls fileDescriptor];
+
+  result = read(descriptor, buffer, len);
+  if (result < 0)
+    {
+#if	HAVE_GNUTLS_TRANSPORT_SET_ERRNO
+      gnutls_transport_set_errno (tls->session->session, errno);
+#endif
+    }
+  return result;
+}
+
+/* Callback to allow the TLS code to push data to the remote system.
+ * If the operation fails, this sets the error number.
+ */
+static ssize_t
+GSTLSHandlePush(gnutls_transport_ptr_t handle, const void *buffer, size_t len)
+{
+  ssize_t       result = 0;
+  GSTLSHandle   *tls = (GSTLSHandle*)handle;
+  int           descriptor = [tls fileDescriptor];
+
+  result = write(descriptor, buffer, len);
+  if (result < 0)
+    {
+#if	HAVE_GNUTLS_TRANSPORT_SET_ERRNO
+      gnutls_transport_set_errno (tls->session->session, errno);
+#endif
+    }
+  return result;
+}
+
+@implementation GSTLSHandle
+
++ (void) initialize
+{
+  if (self == [GSTLSHandle class])
+    {
+      [GSTLSObject class];      // Force initialisation of gnu tls stuff
+    }
+}
+
+- (void) closeFile
+{
+  [self sslDisconnect];
+  [super closeFile];
+}
+
+- (void) dealloc
+{
+  DESTROY(opts);
+  DESTROY(session);
+  [super dealloc];
+}
+
+- (void) finalize
+{
+  [self sslDisconnect];
+  [super finalize];
+}
+
+- (NSInteger) read: (void*)buf length: (NSUInteger)len
+{
+  if (YES == [session active])
+    {
+      return [session read: buf length: len];
+    }
+  return [super read: buf length: len];
+}
+
+- (void) sslDisconnect
+{
+  [session disconnect];
+}
+
+- (BOOL) sslHandshakeEstablished: (BOOL*)result outgoing: (BOOL)isOutgoing
+{
+  NSAssert(0 != result, NSInvalidArgumentException);
+
+  if (YES == [session active])
+    {
+      return YES;	/* Already connected.	*/
+    }
+
+  if (YES == isStandardFile)
+    {
+      NSLog(@"Attempt to perform ssl handshake with a standard file");
+      return YES;
+    }
+
+  /* Set the handshake direction so we know how to set up the connection.
+   */
+  if (nil == session)
+    {
+      session = [[GSTLSSession alloc] initWithOptions: opts
+                                            direction: isOutgoing
+                                            transport: (void*)self
+                                                 push: GSTLSHandlePush
+                                                 pull: GSTLSHandlePull
+                                                 host: nil];
+    }
+
+  if (NO == [session handshake])
+    {
+      return NO;        // Need more.
+    }
+  else
+    {
+      *result = [session active];
+      return YES;
+    }
+}
+
+- (NSString*) sslSetOptions: (NSDictionary*)options
+{
+  if (isStandardFile == YES)
+    {
+      return @"Attempt to set ssl options for a standard file";
+    }
+  ASSIGNCOPY(opts, options);
+  return nil;
+}
+
+- (NSInteger) write: (const void*)buf length: (NSUInteger)len
+{
+  if (YES == [session active])
+    {
+      return [session write: buf length: len];
+    }
+  return [super write: buf length: len];
+}
+
+@end
+#endif  /* MINGW */
+
+#endif  /* HAVE_GNUTLS */
 

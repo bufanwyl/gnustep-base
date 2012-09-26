@@ -1,3 +1,29 @@
+2012-09-26  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSUserDefaults.m: Fix error synchronising from changes in
+        database ... was not sending the notification to say we had updated.
+        * Headers/Foundation/NSFileHandle.h:
+        * Source/GSSocketStream.m:
+        * Source/GSTLS.h:
+        * Source/GSTLS.m:
+        * Source/NSFileHandle.m:
+        More TLS reorganisation and adding diagnostics
+
+2012-09-25  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/GNUmakefile:
+        * Source/GSSocketStream.m:
+        * Source/NSFileHandle.m:
+        * Headers/Foundation/NSFileHandle.h:
+        * SSL/GSSSLHandle.m:
+        * Source/GSTLS.h:
+        * Source/GSTLS.m:
+        Restructure to separate some of the tls functionality out.
+
+2012-09-24  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSBundle.m: Fix error spotted by Fred.
+
 2012-09-24  Richard Frith-Macdonald <rfm@gnu.org>
 
         * Headers/Foundation/NSFileHandle.h: deprecate old method for setting
