@@ -24,6 +24,7 @@
 #import "common.h"
 
 #import "Foundation/NSArray.h"
+#import "Foundation/NSBundle.h"
 #import "Foundation/NSData.h"
 #import "Foundation/NSDictionary.h"
 #import "Foundation/NSEnumerator.h"
@@ -47,30 +48,33 @@ NSString * const GSTLSCertificateFile = @"GSTLSCertificateFile";
 NSString * const GSTLSCertificateKeyFile = @"GSTLSCertificateKeyFile";
 NSString * const GSTLSCertificateKeyPassword = @"GSTLSCertificateKeyPassword";
 NSString * const GSTLSDebug = @"GSTLSDebug";
-NSString * const GSTLSCAVerify = @"GSTLSCAVerify";
+NSString * const GSTLSPriority = @"GSTLSPriority";
+NSString * const GSTLSRemoteHosts = @"GSTLSRemoteHosts";
+NSString * const GSTLSRevokeFile = @"GSTLSRevokeFile";
+NSString * const GSTLSVerify = @"GSTLSVerify";
 
 
 #if     defined(HAVE_GNUTLS)
 
 /* Set up locking callbacks for gcrypt so that it will be thread-safe.
  */
-static int gcry_mutex_init (void **priv)
+static int gcry_mutex_init(void **priv)
 {
   NSLock        *lock = [NSLock new];
   *priv = (void*)lock;
   return 0;
 }
-static int gcry_mutex_destroy (void **lock)
+static int gcry_mutex_destroy(void **lock)
 {
   [((NSLock*)*lock) release];
   return 0;
 }
-static int gcry_mutex_lock (void **lock)
+static int gcry_mutex_lock(void **lock)
 {
   [((NSLock*)*lock) lock];
   return 0;
 }
-static int gcry_mutex_unlock (void **lock)
+static int gcry_mutex_unlock(void **lock)
 {
   [((NSLock*)*lock) unlock];
   return 0;
@@ -92,32 +96,54 @@ GSTLSLog(int level, const char *msg)
 
 /* The caFile variable holds the location of the file containing the default
  * certificate authorities to be used by our system.
- * The hard-coded value can be overridden by the GS_TLS_CA_FILE environment
- * variable, which in turn will be overridden by the GSTLSCAFile user
- * default string.
+ * The hard-coded value is a file in the GNUTLS folder of the base library
+ * resource bundle, but this can be overridden by the GS_TLS_CA_FILE
+ * environment variable, which in turn will be overridden by the GSTLSCAFile
+ * user default string.
  */
-static NSString *caFile = @"/etc/ssl/certs/ca-certificates.crt";
+static NSString *caFile = nil;          // GNUTLS/ca-certificates.crt
+
+/* The caRevoke variable holds the location of the file containing the default
+ * certificate revocation list to be used by our system.
+ * The hard-coded value is a file in the GNUTLS folder of the base library
+ * resource bundle, but this can be overridden by the GS_TLS_REVOKE
+ * environment variable, which in turn will be overridden by the GSTLSRevokeFile
+ * user default string.
+ */
+static NSString *revokeFile = nil;      // GNUTLS/revoke.crl
+
+/* The verifyClient variable tells us if connections from a remote server
+ * should (by default) require and verify a client certificate against
+ * trusted authorities.
+ * The hard-coded value can be overridden by the GS_TLS_VERIFY_C environment
+ * variable, which in turn will be overridden by the GSTLSVerifyClient user
+ * default string.
+ * A GSTLSVerify option set for a specific session overrides this default
+ */
+static BOOL     verifyClient = NO;
 
 /* The verifyServer variable tells us if connections to a remote server should
  * (by default) verify its certificate against trusted authorities.
- * The hard-coded value can be overridden by the GS_TLS_CA_VERIFY environment
- * variable, which in turn will be overridden by the GSTLSCAVerify user
+ * The hard-coded value can be overridden by the GS_TLS_VERIFY_S environment
+ * variable, which in turn will be overridden by the GSTLSVerifyServer user
  * default string.
- * Any option set for a specific session overrides this default
+ * A GSTLSVerify option set for a specific session overrides this default
  */
 static BOOL     verifyServer = NO;
 
 /* The globalDebug variable turns on gnutls debug.  The hard-code value is
  * overridden by GS_TLS_DEBUG, which in turn can be overridden by the
  * GSTLSDebug user default. This is an integer debug level with higher
- * values producing more debug output.  Usually levels higher than 1 are
- * too verbose and not useful unless you have the gnutls source code to hand.
+ * values producing more debug output.  Usually levels above 1 are too
+ * verbose and not useful unless you have the gnutls source code to hand.
  * NB. The GSTLSDebug session option is a boolean to turn on extra debug for
  * a particular session to be produced on verification failure.
  */
 static int      globalDebug = 0;
 
-static NSString *cipherList = nil;
+/* Defines the default priority list.
+ */
+static NSString *priority = nil;
 
 static gnutls_anon_client_credentials_t anoncred;
 
@@ -130,8 +156,11 @@ static gnutls_anon_client_credentials_t anoncred;
 {
   NSString      *str;
 
-  cipherList
-    = [[NSUserDefaults standardUserDefaults] stringForKey: @"GSCipherList"];
+  str = [[NSUserDefaults standardUserDefaults] stringForKey: GSTLSPriority];
+  if (nil != str)
+    {
+      ASSIGN(priority, str);
+    }
 
   /* The GSTLSCAFile user default overrides the builtin value or the
    * GS_TLS_CA_FILE environment variable.
@@ -142,7 +171,24 @@ static gnutls_anon_client_credentials_t anoncred;
       ASSIGN(caFile, str);
     }
 
-  str = [[NSUserDefaults standardUserDefaults] stringForKey: GSTLSCAVerify];
+  /* The GSTLSRevokeFile user default overrides the builtin value or the
+   * GS_TLS_REVOKE environment variable.
+   */
+  str = [[NSUserDefaults standardUserDefaults] stringForKey: GSTLSRevokeFile];
+  if (nil != str)
+    {
+      ASSIGN(revokeFile, str);
+    }
+
+  str = [[NSUserDefaults standardUserDefaults]
+    stringForKey: @"GSTLSVerifyClient"];
+  if (nil != str)
+    {
+      verifyClient = [str boolValue];
+    }
+
+  str = [[NSUserDefaults standardUserDefaults]
+    stringForKey: @"GSTLSVerifyServer"];
   if (nil != str)
     {
       verifyServer = [str boolValue];
@@ -170,21 +216,46 @@ static gnutls_anon_client_credentials_t anoncred;
         {
           NSUserDefaults	*defs;
           NSProcessInfo         *pi;
+          NSBundle              *bundle;
           NSString              *str;
 
           beenHere = YES;
+
+          bundle = [NSBundle bundleForClass: [NSObject class]];
 
           /* Let the GS_TLS_CA_FILE environment variable override the
            * default certificate authority location.
            */
           pi = [NSProcessInfo processInfo];
           str = [[pi environment] objectForKey: @"GS_TLS_CA_FILE"];
+          if (nil == str)
+            {
+              str = [bundle pathForResource: @"ca-certificates"
+                                     ofType: @"crt"
+                                inDirectory: @"GNUTLS"];
+            }
+          ASSIGN(caFile, str);
+
+          /* Let the GS_TLS_REVOKE environment variable override the
+           * default revocation list location.
+           */
+          pi = [NSProcessInfo processInfo];
+          str = [[pi environment] objectForKey: @"GS_TLS_REVOKE"];
+          if (nil == str)
+            {
+              str = [bundle pathForResource: @"revoke"
+                                     ofType: @"crl"
+                                inDirectory: @"GNUTLS"];
+            }
+          ASSIGN(revokeFile, str);
+
+          str = [[pi environment] objectForKey: @"GS_TLS_VERIFY_C"];
           if (nil != str)
             {
-              ASSIGN(caFile, str);
+              verifyClient = [str boolValue];
             }
 
-          str = [[pi environment] objectForKey: @"GS_TLS_CA_VERIFY"];
+          str = [[pi environment] objectForKey: @"GS_TLS_VERIFY_S"];
           if (nil != str)
             {
               verifyServer = [str boolValue];
@@ -206,19 +277,19 @@ static gnutls_anon_client_credentials_t anoncred;
 
           /* Make gcrypt thread-safe
            */
-          gcry_control (GCRYCTL_SET_THREAD_CBS, &gcry_threads_other);
+          gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_other);
 
           /* Initialise gnutls
            */
-          gnutls_global_init ();
+          gnutls_global_init();
 
           /* Allocate global credential information for anonymous tls
            */
-          gnutls_anon_allocate_client_credentials (&anoncred);
+          gnutls_anon_allocate_client_credentials(&anoncred);
 
           /* Enable gnutls logging via NSLog
            */
-          gnutls_global_set_log_function (GSTLSLog);
+          gnutls_global_set_log_function(GSTLSLog);
 
           [self _defaultsChanged: nil];
         }
@@ -277,7 +348,7 @@ static GSTLSDHParams            *paramsCurrent = nil;
    * kx algorithms. When short bit length is used, it might
    * be wise to regenerate parameters often.
    */
-  gnutls_dh_params_init (&p->params);
+  gnutls_dh_params_init(&p->params);
   gnutls_dh_params_generate2 (p->params, 2048);
   [paramsLock lock];
   [paramsCurrent release];
@@ -385,7 +456,7 @@ static GSTLSDHParams            *paramsCurrent = nil;
 
 - (void) dealloc
 {
-  gnutls_dh_params_deinit (params);
+  gnutls_dh_params_deinit(params);
   [super dealloc];
 }
 
@@ -708,7 +779,6 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
                            transport: (void*)handle
                                 push: (GSTLSIOW)pushFunc
                                 pull: (GSTLSIOR)pullFunc
-                                host: (NSHost*)host
 {
   GSTLSSession  *sess;
 
@@ -716,8 +786,7 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
                              direction: isOutgoing
                              transport: handle
                                   push: pushFunc
-                                  pull: pullFunc
-                                  host: host];
+                                  pull: pullFunc];
   return [sess autorelease];
 }
 
@@ -730,7 +799,6 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
 {
   [self finalize];
   DESTROY(opts);
-  DESTROY(host);
   DESTROY(list);
   DESTROY(key);
   DESTROY(dhParams);
@@ -765,7 +833,6 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
              transport: (void*)handle
                   push: (GSTLSIOW)pushFunc
                   pull: (GSTLSIOR)pullFunc
-                  host: (NSHost*)remote
 {
   if (nil != (self = [super init]))
     {
@@ -778,7 +845,6 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
       BOOL      debug = (globalDebug > 0) ? YES : NO;
 
       opts = [options copy];
-      host = [remote copy];
       outgoing = isOutgoing ? YES : NO;
 
       if (NO == debug)
@@ -799,10 +865,15 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
         {
           gnutls_init(&session, GNUTLS_SERVER);
 
-          /* We don't request any certificate from the client.
-           * If we did we would need to verify it.
-           */
-          gnutls_certificate_server_set_request(session, GNUTLS_CERT_IGNORE);
+          if (NO == verifyClient
+            && NO == [[opts objectForKey: GSTLSVerify] boolValue])
+            {
+              /* We don't want to request/verify the client certificate,
+               * so we mustn't ask the other end to send it.
+               */
+              gnutls_certificate_server_set_request(session,
+                GNUTLS_CERT_IGNORE);
+            }
         }
       setup = YES;
 
@@ -847,13 +918,46 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
             }
         }
 
-/*
-      gnutls_certificate_set_x509_crl_file
-        (certcred, "crl.pem", GNUTLS_X509_FMT_PEM);
-      gnutls_certificate_set_verify_function (certcred,
-        _verify_certificate_callback);
+      /* Load default revocation list.
+       */
+      if ([revokeFile length] > 0)
+        {
+          const char    *path = [revokeFile fileSystemRepresentation];
+          int           ret;
 
-*/
+          ret = gnutls_certificate_set_x509_crl_file(certcred,
+            path, GNUTLS_X509_FMT_PEM);
+          if (ret < 0)
+            {
+              NSLog(@"Problem loading revocation list from %@: %s",
+                revokeFile, gnutls_strerror(ret));
+            }
+          else if (0 == ret && YES == debug)
+            {
+              NSLog(@"No revocation loaded from %@", revokeFile);
+            }
+        }
+
+      /* Load any specified revocation list.
+       */
+      str = [opts objectForKey: GSTLSRevokeFile];
+      if ([str length] > 0)
+        {
+          const char    *path = [str fileSystemRepresentation];
+          int           ret;
+
+          ret = gnutls_certificate_set_x509_crl_file(certcred,
+            path, GNUTLS_X509_FMT_PEM);
+          if (ret < 0)
+            {
+              NSLog(@"Problem loading revocation list from %@: %s",
+                str, gnutls_strerror(ret));
+            }
+          else if (0 == ret && YES == debug)
+            {
+              NSLog(@"No revocation loaded from %@", str);
+            }
+        }
 
       certFile = [opts objectForKey: GSTLSCertificateFile];
       privateKey = [opts objectForKey: GSTLSCertificateKeyFile];
@@ -892,60 +996,92 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
               return nil;
             }
 /*
-          else if (NO == outgoing)
+          if (NO == outgoing)
             {
+                // FIXME ... if the server certificate required DH params ...
               dhParams = [[GSTLSDHParams current] retain];
-              gnutls_certificate_set_dh_params (certcred, [dhParams params]);
+              gnutls_certificate_set_dh_params(certcred, [dhParams params]);
             }
 */
         }
 
       gnutls_set_default_priority(session);
+
       pri = [opts objectForKey: NSStreamSocketSecurityLevelKey];
-      if ([pri isEqualToString: NSStreamSocketSecurityLevelNone] == YES)
+      str = [opts objectForKey: GSTLSPriority];
+      if (nil == pri && nil == str)
         {
-          // pri = NSStreamSocketSecurityLevelNone;
-          GSOnceMLog(@"NSStreamSocketSecurityLevelNone is insecure ..."
-            @" not implemented");
-          DESTROY(self);
-          return nil;
+          str = priority;       // Default setting
         }
-      else if ([pri isEqualToString: NSStreamSocketSecurityLevelSSLv2] == YES)
+      if (YES == [str isEqual: @"SSLv3"])
         {
-          // pri = NSStreamSocketSecurityLevelSSLv2;
-          GSOnceMLog(@"NSStreamSocketSecurityLevelTLSv2 is insecure ..."
-            @" not implemented");
-          DESTROY(self);
-          return nil;
+          pri = NSStreamSocketSecurityLevelSSLv3;
+          str = nil;
         }
-      else if ([pri isEqualToString: NSStreamSocketSecurityLevelSSLv3] == YES)
+      else if (YES == [str isEqual: @"SSLv2"])
         {
+          pri = NSStreamSocketSecurityLevelSSLv2;
+          str = nil;
+        }
+      else if (YES == [str isEqual: @"TLSv1"])
+        {
+          pri = NSStreamSocketSecurityLevelTLSv1;
+          str = nil;
+        }
+
+      if (nil == str)
+        {
+          if ([pri isEqual: NSStreamSocketSecurityLevelNone] == YES)
+            {
+              // pri = NSStreamSocketSecurityLevelNone;
+              GSOnceMLog(@"NSStreamSocketSecurityLevelNone is insecure ..."
+                @" not implemented");
+              DESTROY(self);
+              return nil;
+            }
+          else if ([pri isEqual: NSStreamSocketSecurityLevelSSLv2] == YES)
+            {
+              // pri = NSStreamSocketSecurityLevelSSLv2;
+              GSOnceMLog(@"NSStreamSocketSecurityLevelTLSv2 is insecure ..."
+                @" not implemented");
+              DESTROY(self);
+              return nil;
+            }
+          else if ([pri isEqual: NSStreamSocketSecurityLevelSSLv3] == YES)
+            {
 #if GNUTLS_VERSION_NUMBER < 0x020C00
-          const int proto_prio[2] = {
-            GNUTLS_SSL3,
-            0 };
-          gnutls_protocol_set_priority (session, proto_prio);
+              const int proto_prio[2] = {
+                GNUTLS_SSL3,
+                0 };
+              gnutls_protocol_set_priority(session, proto_prio);
 #else
-          gnutls_priority_set_direct(session,
-            "NORMAL:-VERS-TLS-ALL:+VERS-SSL3.0", NULL);
+              gnutls_priority_set_direct(session,
+                "NORMAL:-VERS-TLS-ALL:+VERS-SSL3.0", NULL);
 #endif
-        }
-      else if ([pri isEqualToString: NSStreamSocketSecurityLevelTLSv1] == YES)
-        {
+            }
+          else if ([pri isEqual: NSStreamSocketSecurityLevelTLSv1] == YES)
+            {
 #if GNUTLS_VERSION_NUMBER < 0x020C00
-          const int proto_prio[4] = {
+              const int proto_prio[4] = {
 #if	defined(GNUTLS_TLS1_2)
-            GNUTLS_TLS1_2,
+                GNUTLS_TLS1_2,
 #endif
-            GNUTLS_TLS1_1,
-            GNUTLS_TLS1_0,
-            0 };
-          gnutls_protocol_set_priority (session, proto_prio);
+                GNUTLS_TLS1_1,
+                GNUTLS_TLS1_0,
+                0 };
+              gnutls_protocol_set_priority(session, proto_prio);
 #else
-          gnutls_priority_set_direct(session,
-            "NORMAL:-VERS-SSL3.0:+VERS-TLS-ALL", NULL);
+              gnutls_priority_set_direct(session,
+                "NORMAL:-VERS-SSL3.0:+VERS-TLS-ALL", NULL);
 #endif
+            }
         }
+#if GNUTLS_VERSION_NUMBER >= 0x020C00
+      else
+        {
+          gnutls_priority_set_direct(session, [str UTF8String], NULL);
+        }
+#endif
 
       /* Set certificate credentials for this session.
        */
@@ -954,7 +1090,7 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
       /* Set transport layer to use 
        */
 #if GNUTLS_VERSION_NUMBER < 0x020C00
-      gnutls_transport_set_lowat (session, 0);
+      gnutls_transport_set_lowat(session, 0);
 #endif
       gnutls_transport_set_pull_function(session, pullFunc);
       gnutls_transport_set_push_function(session, pushFunc);
@@ -1005,7 +1141,11 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
         {
           shouldVerify = verifyServer;  // Verify remote server?
         }
-      str = [opts objectForKey: GSTLSCAVerify];
+      else
+        {
+          shouldVerify = verifyClient;  // Verify remote client?
+        }
+      str = [opts objectForKey: GSTLSVerify];
       if (nil != str)
         {
           shouldVerify = [str boolValue];
@@ -1041,7 +1181,7 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
 
 - (NSInteger) write: (const void*)buf length: (NSUInteger)len
 {
-  return gnutls_record_send (session, buf, len);
+  return gnutls_record_send(session, buf, len);
 }
 
 /* Copied/based on the public domain code provided by gnutls
@@ -1086,14 +1226,14 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
 #if 0
         /* This returns NULL in server side.
          */
-        if (gnutls_psk_client_get_hint (session) != NULL)
+        if (gnutls_psk_client_get_hint(session) != NULL)
           {
             [str appendFormat: _(@"- PSK authentication. PSK hint '%s'\n"),
               gnutls_psk_client_get_hint(session)];
           }
         /* This returns NULL in client side.
          */
-        if (gnutls_psk_server_get_username (session) != NULL)
+        if (gnutls_psk_server_get_username(session) != NULL)
           {
             [str appendFormat: _(@"- PSK authentication. Connected as '%s'\n"),
               gnutls_psk_server_get_username(session)];
@@ -1156,19 +1296,20 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
         if (cert_list_size > 0
           && gnutls_certificate_type_get(session) == GNUTLS_CRT_X509)
           {
-            char                dn[128];
-            char                serial[40];
-            size_t              dn_size = sizeof(dn);
-            size_t              serial_size = sizeof(serial);
-            time_t              expiret;
-            time_t              activet;
-            int                 algo;
-            unsigned int        bits;
-            int                 i;
             int                 cert_num;
         
             for (cert_num = 0; cert_num < cert_list_size; cert_num++)
               {
+                char            dn[1024];
+                size_t          dn_size = sizeof(dn);
+                char            serial[40];
+                size_t          serial_size = sizeof(serial);
+                time_t          expiret;
+                time_t          activet;
+                int             algo;
+                unsigned int    bits;
+                int             i;
+
                 gnutls_x509_crt_init(&cert);
                 /* NB. the list of peer certificate is in memory in native
                  * format (DER) rather than the normal file format (PEM).
@@ -1176,6 +1317,7 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
                 gnutls_x509_crt_import(cert,
                   &cert_list[cert_num], GNUTLS_X509_FMT_DER);
 
+                [str appendString: @"\n"];
                 [str appendFormat: _(@"- Certificate %d info:\n"), cert_num];
 
                 expiret = gnutls_x509_crt_get_expiration_time(cert);
@@ -1232,11 +1374,17 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
                 [str appendFormat: _(@"- Certificate version: #%d\n"),
                   gnutls_x509_crt_get_version(cert)];
 
+                dn_size = sizeof(dn);
                 gnutls_x509_crt_get_dn(cert, dn, &dn_size);
-                [str appendFormat: @"- Certificate DN: %s\n", dn];
+                dn[dn_size - 1] = '\0';
+                [str appendFormat: @"- Certificate DN: %@\n",
+                  [NSString stringWithUTF8String: dn]];
 
-                gnutls_x509_crt_get_issuer_dn (cert, dn, &dn_size);
-                [str appendFormat: _(@"- Certificate Issuer's DN: %s\n"), dn];
+                dn_size = sizeof(dn);
+                gnutls_x509_crt_get_issuer_dn(cert, dn, &dn_size);
+                dn[dn_size - 1] = '\0';
+                [str appendFormat: _(@"- Certificate Issuer's DN: %@\n"),
+                  [NSString stringWithUTF8String: dn]];
 
                 gnutls_x509_crt_deinit(cert);
               }
@@ -1292,6 +1440,8 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
 - (int) verify
 {
   BOOL                  debug = (globalDebug > 0) ? YES : NO;
+  NSArray               *names;
+  NSString              *str;
   unsigned int          status;
   const gnutls_datum_t  *cert_list;
   unsigned int          cert_list_size;
@@ -1313,23 +1463,26 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
       return GNUTLS_E_CERTIFICATE_ERROR;
     }
 
-  if (status & GNUTLS_CERT_SIGNER_NOT_FOUND)
-    NSLog(@"The certificate hasn't got a known issuer.");
+  if (YES == debug)
+    {
+      if (status & GNUTLS_CERT_SIGNER_NOT_FOUND)
+        NSLog(@"The certificate hasn't got a known issuer.");
 
-  if (status & GNUTLS_CERT_REVOKED)
-    NSLog(@"The certificate has been revoked.");
+      if (status & GNUTLS_CERT_REVOKED)
+        NSLog(@"The certificate has been revoked.");
 
-/*
-  if (status & GNUTLS_CERT_EXPIRED)
-    NSLog(@"The certificate has expired");
+    /*
+      if (status & GNUTLS_CERT_EXPIRED)
+        NSLog(@"The certificate has expired");
 
-  if (status & GNUTLS_CERT_NOT_ACTIVATED)
-    NSLog(@"The certificate is not yet activated");
-*/
+      if (status & GNUTLS_CERT_NOT_ACTIVATED)
+        NSLog(@"The certificate is not yet activated");
+    */
+    }
 
   if (status & GNUTLS_CERT_INVALID)
     {
-      NSLog(@"The certificate is not trusted.");
+      NSLog(@"The remote certificate is not trusted.");
       return GNUTLS_E_CERTIFICATE_ERROR;
     }
 
@@ -1337,31 +1490,46 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
    * OpenPGP keys. From now on X.509 certificates are assumed. This can
    * be easily extended to work with openpgp keys as well.
    */
-  if (gnutls_certificate_type_get (session) != GNUTLS_CRT_X509)
-    return GNUTLS_E_CERTIFICATE_ERROR;
-
-  if (gnutls_x509_crt_init (&cert) < 0)
+  if (gnutls_certificate_type_get(session) != GNUTLS_CRT_X509)
     {
-      NSLog(@"error in initialization");
+      NSLog(@"The remote certificate is not of the X509 type.");
       return GNUTLS_E_CERTIFICATE_ERROR;
     }
 
-  cert_list = gnutls_certificate_get_peers (session, &cert_list_size);
+  if (gnutls_x509_crt_init(&cert) < 0)
+    {
+      NSLog(@"error in certificate initialization");
+      return GNUTLS_E_CERTIFICATE_ERROR;
+    }
+
+  cert_list = gnutls_certificate_get_peers(session, &cert_list_size);
   if (cert_list == NULL)
     {
-      NSLog(@"No certificate was found!");
+      NSLog(@"No certificate form remote end was found!");
       return GNUTLS_E_CERTIFICATE_ERROR;
     }
 
-  if (gnutls_x509_crt_import (cert, &cert_list[0], GNUTLS_X509_FMT_DER) < 0)
+  if (gnutls_x509_crt_import(cert, &cert_list[0], GNUTLS_X509_FMT_DER) < 0)
     {
       NSLog(@"error parsing certificate");
       return GNUTLS_E_CERTIFICATE_ERROR;
     }
 
-  if (nil != host)
+  str = [opts objectForKey: GSTLSRemoteHosts];
+  if (nil == str)
     {
-      NSEnumerator      *enumerator = [[host names] objectEnumerator];
+      names = nil;
+    }
+  else
+    {
+      /* The string is a comma separated list of permitted host names.
+       */
+      names = [str componentsSeparatedByString: @","];
+    }
+
+  if (nil != names)
+    {
+      NSEnumerator      *enumerator = [names objectEnumerator];
       BOOL              found = NO;
       NSString          *name;
 
@@ -1375,13 +1543,13 @@ static NSMutableDictionary      *privateKeyCache1 = nil;
         }
       if (NO == found)
         {
-          NSLog(@"The certificate's owner does not match host '%@'", host);
-          gnutls_x509_crt_deinit (cert);
+          NSLog(@"The certificate's owner does not match '%@'", names);
+          gnutls_x509_crt_deinit(cert);
           return GNUTLS_E_CERTIFICATE_ERROR;
         }
     }
 
-  gnutls_x509_crt_deinit (cert);
+  gnutls_x509_crt_deinit(cert);
 
   return 0;     // Verified
 }
