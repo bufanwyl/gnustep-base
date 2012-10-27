@@ -1,3 +1,53 @@
+2012-10-25  Quentin Mathe <quentin.mathe@gmail.com>
+
+	* Headers/GNUstepBase/GSConfig.h.in: Prevent redefinition warnings for 
+	__STDC_LIMIT_MACROS and __STC_CONSTANT_MACROS (both are ObjC++ related).
+
+2012-10-22  Thomas Davie <tom.davie@gmail.com>
+
+        * Headers/Foundation/NSSet.h:
+        * Source/NSSet.m:
+        Add -objectsPassingTest:
+
+2012-10-22  Rene Hexel <rhexel+savannah@mac.com>
+
+        * Source/Additions/GSXML.m:
+        In libxml2 the content and use fields have become private and are only
+        exposed through xmlBufContent() and xmlBufUse() since libxml-2.9.0.
+        Use those macros for newer versions of libxml2.
+
+2012-10-20  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSConnection.m: Use NSUInteger for array indexes/counters.
+
+2012-10-18  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSXMLParser.m: Try to fix entity parsing bug #37596
+
+2012-10-17  Richard Frith-Macdonald <rfm@gnu.org>
+
+        * Source/NSBundle.m:
+        * Source/NSCalendarDate.m:
+        * Source/NSFileManager.m:
+        * Source/NSJSONSerialization.m:
+        * Source/NSMessagePort.m:
+        * Source/NSMessagePortNameServer.m:
+        * Source/NSPropertyList.m:
+        Avoid autoreleasing things in +initialize when there may be no
+        autorelease pool present ... we don't want to either leak or
+        cause recursive loops when we want to log any leaks.
+
+2012-10-15  Eric Wasylishen  <ewasylishen@gmail.com>
+
+	* Tests/base/NSArchiver/stringEncoding.m: add test for last commit
+
+2012-10-15  Eric Wasylishen  <ewasylishen@gmail.com>
+
+	* Source/NSPropertyList.m (-[GSBinaryPLGenerator storeString:):
+	Write unicode strings in big-endian instead of little-endian.
+	The resulting plists now load properly on OS X. Thanks to
+	rdemet for bug report.
+
 2012-10-15  Richard Frith-Macdonald <rfm@gnu.org>
 
         * Headers/Foundation/NSCharacterSet.h:
